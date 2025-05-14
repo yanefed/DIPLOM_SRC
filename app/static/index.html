@@ -3,46 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flight Delay Prediction</title>
-    <link rel="stylesheet" src="/static/css/styles.css">
+    <title>Прогноз задержки рейса</title>
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body>
+<body> 
     <div class="container">
-        <h1>Flight Delay Prediction</h1>
+        <h1>Прогноз задержки рейса</h1>
 
         <div class="prediction-form">
             <div class="form-group">
-                <label for="origin">Origin Airport:</label>
-                <input type="text" id="origin" placeholder="e.g., JFK" required>
+                <label for="origin">Аэропорт вылета:</label>
+                 <select id="origin" required>
+                    <option value="" disabled selected>Выберите аэропорт вылета</option>
+                    <!-- Будет заполнено динамически -->
+                </select>
             </div>
 
             <div class="form-group">
-                <label for="destination">Destination Airport:</label>
-                <input type="text" id="destination" placeholder="e.g., LAX" required>
+                <label for="destination">Аэропорт назначения:</label>
+                <select id="destination" required>
+                    <option value="" disabled selected>Выберите аэропорт назначения</option>
+                    <!-- Будет заполнено динамически -->
+                </select>
             </div>
 
             <div class="form-group">
-                <label for="flight-date">Flight Date:</label>
+                <label for="airline">Авиакомпания:</label>
+                <select id="airline" required>
+                    <option value="" disabled selected>Выберите авиакомпанию</option>
+                    <!-- Будет заполнено динамически -->
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="flight-date">Дата рейса:</label>
                 <input type="date" id="flight-date" required>
             </div>
 
-            <button id="predict-button">Predict Delay</button>
+            <button id="predict-button">Рассчитать задержку</button>
         </div>
 
         <div class="results" id="results-container">
-            <h2>Prediction Results</h2>
+            <h2>Результаты прогноза</h2>
             <div class="result-card hidden" id="result-card">
                 <div class="prediction-value">
-                    <span id="delay-value">--</span> minutes
+                    <span id="delay-value">--</span> минут
                 </div>
                 <div class="confidence">
-                    Confidence: <span id="confidence-value">--</span>%
+                    Уверенность прогноза: <span id="confidence-value">--</span>%
                 </div>
                 <div class="route-info">
                     <span id="route-info">--</span>
                 </div>
                 <div class="prediction-factors">
-                    <h3>Factors Considered:</h3>
+                    <h3>Факторы, учитываемые при рассчете задержки:</h3>
                     <ul id="factors-list"></ul>
                 </div>
             </div>

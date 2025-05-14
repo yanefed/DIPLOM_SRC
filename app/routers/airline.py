@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.database import get_db
 from app.models.airline import Airline
@@ -10,14 +11,45 @@ airline_router = APIRouter()
 
 
 # [...] get all airline records
-@airline_router.get("/", dependencies=[Depends(has_permission("read:airlines"))])
+@airline_router.get("/")
 def get_airlines(db: Session = Depends(get_db)):
     airlines = db.query(Airline).all()
     return {"status": "ok", "message": "List of airlines", "airlines": airlines}
 
 
+# [...] get airlines by route
+@airline_router.get("/route/{origin}/{destination}")
+def get_airlines_by_route(origin: str, destination: str, db: Session = Depends(get_db)):
+    """Get airlines that operate on a specific route."""
+    try:
+        # SQL query to find airlines operating on the given route
+        query = text("""
+            SELECT DISTINCT a.airline_code, a.airline_name
+            FROM flights f
+            JOIN airlines a ON f.airline_code = a.airline_code
+            WHERE f.origin_airport = :origin
+            AND f.dest_airport = :destination
+        """)
+        
+        result = db.execute(query, {"origin": origin, "destination": destination})
+        airlines = [{"airline_code": row[0], "airline_name": row[1]} for row in result]
+        
+        return {
+            "status": "ok",
+            "message": f"Airlines operating from {origin} to {destination}",
+            "airlines": airlines,
+            "count": len(airlines)
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error retrieving airlines: {str(e)}",
+            "airlines": []
+        }
+
+
 # [...] add a new airline record
-@airline_router.post("/", status_code=status.HTTP_201_CREATED, dependencies=[Depends(has_permission("write:airlines"))])
+@airline_router.post("/")
 def add_airline(airline: AirlineBaseSchema, db: Session = Depends(get_db)):
     new_airline = Airline(
         airline_name=airline.name,
@@ -30,7 +62,7 @@ def add_airline(airline: AirlineBaseSchema, db: Session = Depends(get_db)):
 
 
 # [...] edit an airline record
-@airline_router.put("/{airline_code}", dependencies=[Depends(has_permission("write:airlines"))])
+@airline_router.put("/{airline_code}")
 def update_airline(airline_code: str, airline: AirlineBaseSchema, db: Session = Depends(get_db)):
     airline_record = db.query(Airline).filter(Airline.airline_code == airline_code).first()
     if not airline_record:
@@ -43,7 +75,7 @@ def update_airline(airline_code: str, airline: AirlineBaseSchema, db: Session = 
 
 
 # [...] get a single airline record
-@airline_router.get("/{airline_code}", dependencies=[Depends(has_permission("read:airlines"))])
+@airline_router.get("/{airline_code}")
 def get_airline(airline_code: str, db: Session = Depends(get_db)):
     airline_record = db.query(Airline).filter(Airline.airline_code == airline_code).first()
     if not airline_record:
@@ -52,7 +84,7 @@ def get_airline(airline_code: str, db: Session = Depends(get_db)):
 
 
 # [...] delete an airline record
-@airline_router.delete("/{airline_code}", dependencies=[Depends(has_permission("write:airlines"))])
+@airline_router.delete("/{airline_code}")
 def delete_airline(airline_code: str, db: Session = Depends(get_db)):
     airline_record = db.query(Airline).filter(Airline.airline_code == airline_code).first()
     if not airline_record:

@@ -10,14 +10,14 @@ system_router = APIRouter()
 
 
 # [...] get all system records
-@system_router.get("/", dependencies=[Depends(has_permission("read:systems"))])
+@system_router.get("/")
 def get_systems(db: Session = Depends(get_db)):
     systems = db.query(System).all()
     return {"status": "ok", "message": "List of systems", "systems": systems}
 
 
 # [...] add a new system record
-@system_router.post("/", status_code=status.HTTP_201_CREATED, dependencies=[Depends(has_permission("write:systems"))])
+@system_router.post("/", status_code=status.HTTP_201_CREATED)
 def add_system(system: SystemBaseSchema, db: Session = Depends(get_db)):
     new_system = System(
         plane=system.plane,
@@ -32,7 +32,7 @@ def add_system(system: SystemBaseSchema, db: Session = Depends(get_db)):
 
 
 # [...] edit a system record
-@system_router.put("/{system_id}", dependencies=[Depends(has_permission("write:systems"))])
+@system_router.put("/{system_id}")
 def update_system(system_id: int, system: SystemBaseSchema, db: Session = Depends(get_db)):
     system_record = db.query(System).filter(System.id == system_id).first()
     if not system_record:
@@ -45,7 +45,7 @@ def update_system(system_id: int, system: SystemBaseSchema, db: Session = Depend
 
 
 # [...] get a system record
-@system_router.get("/{system_id}", dependencies=[Depends(has_permission("read:systems"))])
+@system_router.get("/{system_id}")
 def get_system(system_id: int, db: Session = Depends(get_db)):
     system_record = db.query(System).filter(System.id == system_id).first()
     if not system_record:
@@ -54,7 +54,7 @@ def get_system(system_id: int, db: Session = Depends(get_db)):
 
 
 # [...] delete a system record
-@system_router.delete("/{system_id}", dependencies=[Depends(has_permission("write:systems"))])
+@system_router.delete("/{system_id}")
 def delete_system(system_id: int, db: Session = Depends(get_db)):
     system_record = db.query(System).filter(System.id == system_id).first()
     if not system_record:

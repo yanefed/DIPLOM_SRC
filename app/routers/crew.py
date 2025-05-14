@@ -10,14 +10,14 @@ crew_router = APIRouter()
 
 
 # [...] get all crew records
-@crew_router.get("/", dependencies=[Depends(has_permission("read:crews"))])
+@crew_router.get("/")
 def get_crews(db: Session = Depends(get_db)):
     crews = db.query(Crew).all()
     return {"status": "ok", "message": "List of crews", "crews": crews}
 
 
 # [...] add a new crew record
-@crew_router.post("/", status_code=status.HTTP_201_CREATED, dependencies=[Depends(has_permission("write:crews"))])
+@crew_router.post("/", status_code=status.HTTP_201_CREATED)
 def add_crew(crew: CrewBaseSchema, db: Session = Depends(get_db)):
     new_crew = Crew(
         tail_num=crew.tail_num,
@@ -35,7 +35,7 @@ def add_crew(crew: CrewBaseSchema, db: Session = Depends(get_db)):
 
 
 # [...] edit a crew record
-@crew_router.put("/{crew_tail_num}", dependencies=[Depends(has_permission("write:crews"))])
+@crew_router.put("/{crew_tail_num}")
 def update_crew(crew_tail_num: str, crew: CrewBaseSchema, db: Session = Depends(get_db)):
     crew_record = db.query(Crew).filter(Crew.tail_num == crew_tail_num).first()
     if not crew_record:
@@ -48,7 +48,7 @@ def update_crew(crew_tail_num: str, crew: CrewBaseSchema, db: Session = Depends(
 
 
 # [...] get a single crew record
-@crew_router.get("/{crew_tail_num}", dependencies=[Depends(has_permission("read:crews"))])
+@crew_router.get("/{crew_tail_num}")
 def get_crew(crew_tail_num: str, db: Session = Depends(get_db)):
     crew_record = db.query(Crew).filter(Crew.tail_num == crew_tail_num).first()
     if not crew_record:
@@ -57,7 +57,7 @@ def get_crew(crew_tail_num: str, db: Session = Depends(get_db)):
 
 
 # [...] delete a crew record
-@crew_router.delete("/{crew_tail_num}", dependencies=[Depends(has_permission("write:crews"))])
+@crew_router.delete("/{crew_tail_num}")
 def delete_crew(crew_tail_num: str, db: Session = Depends(get_db)):
     crew_record = db.query(Crew).filter(Crew.tail_num == crew_tail_num).first()
     if not crew_record:

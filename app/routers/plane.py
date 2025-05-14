@@ -10,14 +10,14 @@ plane_router = APIRouter()
 
 
 # [...] get all plane records
-@plane_router.get("/", dependencies=[Depends(has_permission("read:planes"))])
+@plane_router.get("/")
 def get_planes(db: Session = Depends(get_db)):
     planes = db.query(Plane).all()
     return {"status": "ok", "message": "List of planes", "planes": planes}
 
 
 # [...] add a new plane record
-@plane_router.post("/", status_code=status.HTTP_201_CREATED, dependencies=[Depends(has_permission("write:planes"))])
+@plane_router.post("/", status_code=status.HTTP_201_CREATED)
 def add_plane(plane: PlaneBaseSchema, db: Session = Depends(get_db)):
     new_plane = Plane(
         manufacture_year=plane.manufacture_year,
@@ -33,7 +33,7 @@ def add_plane(plane: PlaneBaseSchema, db: Session = Depends(get_db)):
 
 
 # [...] edit a plane record
-@plane_router.put("/{plane_tail_num}", dependencies=[Depends(has_permission("write:planes"))])
+@plane_router.put("/{plane_tail_num}")
 def update_plane(plane_tail_num: str, plane: PlaneBaseSchema, db: Session = Depends(get_db)):
     plane_record = db.query(Plane).filter(Plane.tail_num == plane_tail_num).first()
     if not plane_record:
@@ -46,7 +46,7 @@ def update_plane(plane_tail_num: str, plane: PlaneBaseSchema, db: Session = Depe
 
 
 # [...] get a plane record
-@plane_router.get("/{plane_tail_num}", dependencies=[Depends(has_permission("read:planes"))])
+@plane_router.get("/{plane_tail_num}")
 def get_plane(plane_tail_num: str, db: Session = Depends(get_db)):
     plane_record = db.query(Plane).filter(Plane.tail_num == plane_tail_num).first()
     if not plane_record:
@@ -55,7 +55,7 @@ def get_plane(plane_tail_num: str, db: Session = Depends(get_db)):
 
 
 # [...] delete a plane record
-@plane_router.delete("/{plane_tail_num}", dependencies=[Depends(has_permission("write:planes"))])
+@plane_router.delete("/{plane_tail_num}")
 def delete_plane(plane_tail_num: str, db: Session = Depends(get_db)):
     plane_record = db.query(Plane).filter(Plane.tail_num == plane_tail_num).first()
     if not plane_record:

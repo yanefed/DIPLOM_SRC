@@ -10,14 +10,14 @@ delay_router = APIRouter()
 
 
 # [...] get all delay records
-@delay_router.get("/", dependencies=[Depends(has_permission("read:delays"))])
+@delay_router.get("/")
 def get_delays(db: Session = Depends(get_db)):
     delays = db.query(Delay).all()
     return {"status": "ok", "message": "List of delays", "delays": delays}
 
 
 # [...] add a new delay record
-@delay_router.post("/", status_code=status.HTTP_201_CREATED, dependencies=[Depends(has_permission("write:delays"))])
+@delay_router.post("/", status_code=status.HTTP_201_CREATED)
 def add_delay(delay: DelayBaseSchema, db: Session = Depends(get_db)):
     new_delay = Delay(
         dep_delay=delay.dep_delay,
@@ -32,7 +32,7 @@ def add_delay(delay: DelayBaseSchema, db: Session = Depends(get_db)):
 
 
 # [...] edit a delay record
-@delay_router.put("/{delay_id}", dependencies=[Depends(has_permission("write:delays"))])
+@delay_router.put("/{delay_id}")
 def update_delay(delay_id: int, delay: DelayBaseSchema, db: Session = Depends(get_db)):
     delay_record = db.query(Delay).filter(Delay.id == delay_id).first()
     if not delay_record:
@@ -45,7 +45,7 @@ def update_delay(delay_id: int, delay: DelayBaseSchema, db: Session = Depends(ge
 
 
 # [...] get a single delay record
-@delay_router.get("/{delay_id}", dependencies=[Depends(has_permission("read:delays"))])
+@delay_router.get("/{delay_id}")
 def get_delay(delay_id: int, db: Session = Depends(get_db)):
     delay_record = db.query(Delay).filter(Delay.id == delay_id).first()
     if not delay_record:
@@ -54,7 +54,7 @@ def get_delay(delay_id: int, db: Session = Depends(get_db)):
 
 
 # [...] delete a delay record
-@delay_router.delete("/{delay_id}", dependencies=[Depends(has_permission("write:delays"))])
+@delay_router.delete("/{delay_id}")
 def delete_delay(delay_id: int, db: Session = Depends(get_db)):
     delay_record = db.query(Delay).filter(Delay.id == delay_id).first()
     if not delay_record:

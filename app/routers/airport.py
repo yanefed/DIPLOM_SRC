@@ -10,14 +10,14 @@ airport_router = APIRouter()
 
 
 # [...] get all airport records
-@airport_router.get("/", dependencies=[Depends(has_permission("read:airports"))])
+@airport_router.get("/")
 def get_airports(db: Session = Depends(get_db)):
     airports = db.query(Airport).all()
     return {"status": "ok", "message": "List of airports", "airports": airports}
 
 
 # [...] add a new airport record
-@airport_router.post("/", status_code=status.HTTP_201_CREATED, dependencies=[Depends(has_permission("write:airports"))])
+@airport_router.post("/", status_code=status.HTTP_201_CREATED)
 def add_airport(airport: AirportBaseSchema, db: Session = Depends(get_db)):
     new_airport = Airport(
         display_airport_name=airport.name,
@@ -36,7 +36,7 @@ def add_airport(airport: AirportBaseSchema, db: Session = Depends(get_db)):
 
 
 # [...] edit an airport record
-@airport_router.put("/{airport_code}", dependencies=[Depends(has_permission("write:airports"))])
+@airport_router.put("/{airport_code}")
 def update_airport(airport_code: str, airport: AirportBaseSchema, db: Session = Depends(get_db)):
     airport_record = db.query(Airport).filter(Airport.airport_code == airport_code).first()
     if not airport_record:
@@ -48,7 +48,7 @@ def update_airport(airport_code: str, airport: AirportBaseSchema, db: Session = 
 
 
 # [...] get a single airport record
-@airport_router.get("/{airport_code}", dependencies=[Depends(has_permission("read:airports"))])
+@airport_router.get("/{airport_code}")
 def get_airport(airport_code: str, db: Session = Depends(get_db)):
     airport = db.query(Airport).filter(Airport.airport_code == airport_code).first()
     if not airport:
@@ -57,7 +57,7 @@ def get_airport(airport_code: str, db: Session = Depends(get_db)):
 
 
 # [...] delete an airport record
-@airport_router.delete("/{airport_code}", dependencies=[Depends(has_permission("write:airports"))])
+@airport_router.delete("/{airport_code}")
 def delete_airport(airport_code: str, db: Session = Depends(get_db)):
     airport = db.query(Airport).filter(Airport.airport_code == airport_code).first()
     if not airport:

@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
 
-from .routers import airline_router, airport_router, auth_router, checklist_router, crew_router, delay_router, \
+from app.routers import airline_router, airport_router, auth_router, checklist_router, crew_router, delay_router, \
     flight_router, plane_router, probability_router, report_and_systems_router, report_router, system_router, delay_prediction_router
 
 # START COMMAND:
@@ -39,11 +39,6 @@ app.include_router(checklist_router, prefix="/api/v1/checklists", tags=["checkli
 app.include_router(probability_router, prefix="/api/v1/probability", tags=["probability"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(delay_prediction_router, prefix="/api/v1/predict", tags=["prediction"])
-
-# [...] root
-@app.get("/api/v1/")
-def read_root():
-    return {"Hello": "World"}
 
 @app.get("/")
 async def read_root():

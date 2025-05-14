@@ -34,8 +34,7 @@ def create_trigger(db: Session):
 
 
 # [...] post all reports
-@report_and_systems_router.post("/", status_code=status.HTTP_201_CREATED,
-                                dependencies=[Depends(has_permission("write:reports_and_systems"))])
+@report_and_systems_router.post("/", status_code=status.HTTP_201_CREATED)
 def create_reports_and_systems(db: Session = Depends(get_db)):
     try:
         create_trigger(db)
@@ -113,8 +112,7 @@ def create_reports_and_systems(db: Session = Depends(get_db)):
 
 
 # [...] get all reports
-@report_and_systems_router.get("/", status_code=status.HTTP_200_OK,
-                               dependencies=[Depends(has_permission("read:reports_and_systems"))])
+@report_and_systems_router.get("/", status_code=status.HTTP_200_OK)
 def read_reports_and_systems(db: Session = Depends(get_db)):
     reports = db.query(Report).all()
     systems = db.query(System).all()
@@ -131,8 +129,7 @@ def read_reports_and_systems(db: Session = Depends(get_db)):
 
 
 # [...] delete all reports
-@report_and_systems_router.delete("/", status_code=status.HTTP_200_OK,
-                                  dependencies=[Depends(has_permission("write:reports_and_systems"))])
+@report_and_systems_router.delete("/", status_code=status.HTTP_200_OK)
 def delete_reports_and_systems(db: Session = Depends(get_db)):
     db.query(Report).delete()
     db.query(System).delete()
@@ -141,8 +138,7 @@ def delete_reports_and_systems(db: Session = Depends(get_db)):
 
 
 # [...] get reports by plane
-@report_and_systems_router.get("/{plane}", status_code=status.HTTP_200_OK,
-                               dependencies=[Depends(has_permission("read:reports_and_systems"))])
+@report_and_systems_router.get("/{plane}", status_code=status.HTTP_200_OK)
 def read_reports_and_systems_by_plane(plane: str, db: Session = Depends(get_db)):
     reports = db.query(Report).filter(Report.plane == plane).all()
     systems = db.query(System).filter(System.plane == plane).all()
@@ -159,8 +155,7 @@ def read_reports_and_systems_by_plane(plane: str, db: Session = Depends(get_db))
 
 
 # [...] delete reports by plane
-@report_and_systems_router.delete("/{plane}", status_code=status.HTTP_200_OK,
-                                  dependencies=[Depends(has_permission("write:reports_and_systems"))])
+@report_and_systems_router.delete("/{plane}", status_code=status.HTTP_200_OK)
 def delete_reports_and_systems_by_plane(plane: str, db: Session = Depends(get_db)):
     db.query(Report).filter(Report.plane == plane).delete()
     db.query(System).filter(System.plane == plane).delete()
@@ -169,8 +164,7 @@ def delete_reports_and_systems_by_plane(plane: str, db: Session = Depends(get_db
 
 
 # [...] get reports by plane and category
-@report_and_systems_router.get("/{plane}/{category}", status_code=status.HTTP_200_OK,
-                               dependencies=[Depends(has_permission("read:reports_and_systems"))])
+@report_and_systems_router.get("/{plane}/{category}", status_code=status.HTTP_200_OK)
 def read_reports_and_systems_by_plane_and_category(plane: str, category: str, db: Session = Depends(get_db)):
     reports = db.query(Report).filter(Report.plane == plane).all()
     systems = db.query(System).filter(System.plane == plane, System.category == category).all()
@@ -187,8 +181,7 @@ def read_reports_and_systems_by_plane_and_category(plane: str, category: str, db
 
 
 # [...] delete reports by plane and category
-@report_and_systems_router.delete("/{plane}/{category}", status_code=status.HTTP_200_OK,
-                                  dependencies=[Depends(has_permission("write:reports_and_systems"))])
+@report_and_systems_router.delete("/{plane}/{category}", status_code=status.HTTP_200_OK)
 def delete_reports_and_systems_by_plane_and_category(plane: str, category: str, db: Session = Depends(get_db)):
     db.query(Report).filter(Report.plane == plane).delete()
     db.query(System).filter(System.plane == plane, System.category == category).delete()
@@ -197,8 +190,7 @@ def delete_reports_and_systems_by_plane_and_category(plane: str, category: str, 
 
 
 # [...] get reports by plane and category and name
-@report_and_systems_router.get("/{plane}/{category}/{name}", status_code=status.HTTP_200_OK,
-                               dependencies=[Depends(has_permission("read:reports_and_systems"))])
+@report_and_systems_router.get("/{plane}/{category}/{name}", status_code=status.HTTP_200_OK)
 def read_reports_and_systems_by_plane_and_category_and_name(plane: str, category: str, name: str,
                                                             db: Session = Depends(get_db)):
     reports = db.query(Report).filter(Report.plane == plane).all()
@@ -216,8 +208,7 @@ def read_reports_and_systems_by_plane_and_category_and_name(plane: str, category
 
 
 # [...] delete reports by plane and category and name
-@report_and_systems_router.delete("/{plane}/{category}/{name}", status_code=status.HTTP_200_OK,
-                                  dependencies=[Depends(has_permission("write:reports_and_systems"))])
+@report_and_systems_router.delete("/{plane}/{category}/{name}", status_code=status.HTTP_200_OK)
 def delete_reports_and_systems_by_plane_and_category_and_name(plane: str, category: str, name: str,
                                                               db: Session = Depends(get_db)):
     db.query(Report).filter(Report.plane == plane).delete()
@@ -227,8 +218,7 @@ def delete_reports_and_systems_by_plane_and_category_and_name(plane: str, catego
 
 
 # [...] get reports by plane and category and name and k_coeff
-@report_and_systems_router.get("/{plane}/{category}/{name}/{k_coeff}", status_code=status.HTTP_200_OK,
-                               dependencies=[Depends(has_permission("read:reports_and_systems"))])
+@report_and_systems_router.get("/{plane}/{category}/{name}/{k_coeff}", status_code=status.HTTP_200_OK)
 def read_reports_and_systems_by_plane_and_category_and_name_and_k_coeff(plane: str, category: str, name: str,
                                                                         k_coeff: float, db: Session = Depends(get_db)):
     reports = db.query(Report).filter(Report.plane == plane).all()
@@ -247,8 +237,7 @@ def read_reports_and_systems_by_plane_and_category_and_name_and_k_coeff(plane: s
 
 
 # [...] delete reports by plane and category and name and k_coeff
-@report_and_systems_router.delete("/{plane}/{category}/{name}/{k_coeff}", status_code=status.HTTP_200_OK,
-                                  dependencies=[Depends(has_permission("write:reports_and_systems"))])
+@report_and_systems_router.delete("/{plane}/{category}/{name}/{k_coeff}", status_code=status.HTTP_200_OK)
 def delete_reports_and_systems_by_plane_and_category_and_name_and_k_coeff(plane: str, category: str, name: str,
                                                                           k_coeff: float,
                                                                           db: Session = Depends(get_db)):
@@ -260,8 +249,7 @@ def delete_reports_and_systems_by_plane_and_category_and_name_and_k_coeff(plane:
 
 
 # [...] post reports by plane and category and name and k_coeff
-@report_and_systems_router.post("/{plane}/{category}/{name}/{k_coeff}", status_code=status.HTTP_201_CREATED,
-                                dependencies=[Depends(has_permission("write:reports_and_systems"))])
+@report_and_systems_router.post("/{plane}/{category}/{name}/{k_coeff}", status_code=status.HTTP_201_CREATED)
 def create_reports_and_systems_by_plane_and_category_and_name_and_k_coeff(plane: str, category: str, name: str,
                                                                           k_coeff: float,
                                                                           db: Session = Depends(get_db)):

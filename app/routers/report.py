@@ -10,14 +10,14 @@ report_router = APIRouter()
 
 
 # [...] get all report records
-@report_router.get("/", dependencies=[Depends(has_permission("read:reports"))])
+@report_router.get("/")
 def get_reports(db: Session = Depends(get_db)):
     reports = db.query(Report).all()
     return {"status": "ok", "message": "List of reports", "reports": reports}
 
 
 # [...] add a new report record
-@report_router.post("/", status_code=status.HTTP_201_CREATED, dependencies=[Depends(has_permission("write:reports"))])
+@report_router.post("/", status_code=status.HTTP_201_CREATED)
 def add_report(report: ReportBaseSchema, db: Session = Depends(get_db)):
     new_report = Report(plane=report.plane, check_time=report.check_time, rate=report.rate, decision=report.decision, )
     db.add(new_report)
@@ -27,7 +27,7 @@ def add_report(report: ReportBaseSchema, db: Session = Depends(get_db)):
 
 
 # [...] edit a report record
-@report_router.put("/{report_id}", dependencies=[Depends(has_permission("write:reports"))])
+@report_router.put("/{report_id}")
 def update_report(report_id: int, report: ReportBaseSchema, db: Session = Depends(get_db)):
     report_record = db.query(Report).filter(Report.id == report_id).first()
     if not report_record:
@@ -40,7 +40,7 @@ def update_report(report_id: int, report: ReportBaseSchema, db: Session = Depend
 
 
 # [...] get a report record
-@report_router.get("/{report_id}", dependencies=[Depends(has_permission("read:reports"))])
+@report_router.get("/{report_id}")
 def get_report(report_id: int, db: Session = Depends(get_db)):
     report_record = db.query(Report).filter(Report.id == report_id).first()
     if not report_record:
@@ -49,7 +49,7 @@ def get_report(report_id: int, db: Session = Depends(get_db)):
 
 
 # [...] delete a report record
-@report_router.delete("/{report_id}", dependencies=[Depends(has_permission("write:reports"))])
+@report_router.delete("/{report_id}")
 def delete_report(report_id: int, db: Session = Depends(get_db)):
     report_record = db.query(Report).filter(Report.id == report_id).first()
     if not report_record:

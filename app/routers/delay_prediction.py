@@ -168,8 +168,8 @@ async def predict_delay(
         origin: str,
         destination: str,
         date: str,
-        db: Session = Depends(get_db),
-        _=Depends(has_permission("read:delays"))
+        airline: str = None,
+        db: Session = Depends(get_db)
 ):
     try:
         predictor = AdaptivePredictor()
@@ -181,16 +181,17 @@ async def predict_delay(
             "origin": origin,
             "destination": destination,
             "date": date,
+            "airline": airline,
             "predicted_delay": round(predicted_delay, 2),
             "confidence": round(confidence * 100, 2),
             "prediction_timestamp": datetime.now().isoformat(),
             "factors_considered": [
-                "Historical delays",
-                "Route frequency",
-                "Distance",
-                "Weather incidents",
-                "Seasonal patterns",
-                "Cancellation history"
+                "Исторические задержки",
+                "Частота маршрута",
+                "Расстояние",
+                "Погодные условия",
+                "Сезонные закономерности",
+                "История отмен рейсов"
             ],
             "prediction_type": "baseline" if predicted_delay == 15 else "data-driven"
         }
@@ -200,6 +201,7 @@ async def predict_delay(
             "origin": origin,
             "destination": destination,
             "date": date,
+            "airline": airline,
             "predicted_delay": 15.0,
             "confidence": 50.0,
             "prediction_timestamp": datetime.now().isoformat(),

@@ -11,14 +11,14 @@ flight_router = APIRouter()
 
 
 # [...] get all flight records
-@flight_router.get("/", dependencies=[Depends(has_permission("read:flights"))])
+@flight_router.get("/")
 def get_flights(db: Session = Depends(get_db)):
     flights = db.query(Flight).all()
     return {"status": "ok", "message": "List of flights", "flights": flights}
 
 
 # [...] add a new flight record
-@flight_router.post("/", status_code=status.HTTP_201_CREATED, dependencies=[Depends(has_permission("write:flights"))])
+@flight_router.post("/", status_code=status.HTTP_201_CREATED)
 def add_flight(flight: FlightBaseSchema, db: Session = Depends(get_db)):
     new_flight = Flight(fl_date=flight.fl_date, airline_code=flight.airline_code, distance=flight.distance,
                         tail_num=flight.tail_num, dep_time=flight.dep_time, arr_time=flight.arr_time)
@@ -33,7 +33,7 @@ def add_flight(flight: FlightBaseSchema, db: Session = Depends(get_db)):
 
 
 # [...] edit a flight record
-@flight_router.put("/{flight_id}", dependencies=[Depends(has_permission("write:flights"))])
+@flight_router.put("/{flight_id}")
 def update_flight(flight_id: int, flight: FlightBaseSchema, db: Session = Depends(get_db)):
     flight_record = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight_record:
@@ -46,7 +46,7 @@ def update_flight(flight_id: int, flight: FlightBaseSchema, db: Session = Depend
 
 
 # [...] get a single flight record
-@flight_router.get("/{flight_id}", dependencies=[Depends(has_permission("read:flights"))])
+@flight_router.get("/{flight_id}")
 def get_flight(flight_id: int, db: Session = Depends(get_db)):
     flight_record = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight_record:
@@ -55,7 +55,7 @@ def get_flight(flight_id: int, db: Session = Depends(get_db)):
 
 
 # [...] delete a flight record
-@flight_router.delete("/{flight_id}", dependencies=[Depends(has_permission("write:flights"))])
+@flight_router.delete("/{flight_id}")
 def delete_flight(flight_id: int, db: Session = Depends(get_db)):
     flight_record = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight_record:
