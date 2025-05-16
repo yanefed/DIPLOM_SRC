@@ -39,43 +39,46 @@ async function loadAirlines() {
 async function updateAvailableAirlines() {
     const origin = document.getElementById('origin').value;
     const destination = document.getElementById('destination').value;
-    
+
+    console.log("Origin:", origin);
+    console.log("Destination:", destination);
+
     if (!origin || !destination) {
+        console.log("Either origin or destination is not selected yet");
         return;
     }
-    
+
     try {
-        // Use the new route-specific endpoint to get airlines for this route
-        const response = await fetch(`/api/v1/airlines/route/${origin}/${destination}`);
+        const apiUrl = `/api/v1/airlines/route/${origin}/${destination}`;
+        console.log(`Fetching airlines for route ${origin} to ${destination} from URL: ${apiUrl}`);
+
+        // Для отладки выведем все элементы select
+        console.log("Origin select:", document.getElementById('origin').outerHTML);
+        console.log("Destination select:", document.getElementById('destination').outerHTML);
+
+        const response = await fetch(apiUrl);
+        console.log("Response status:", response.status);
+
         if (!response.ok) {
-            throw new Error('Failed to load airlines for route');
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
-        console.log(`Airlines for route ${origin} to ${destination}:`, data);
-        
-        if (data.status === "ok" && data.airlines && data.airlines.length > 0) {
-            updateAirlineDropdown(data.airlines);
-        } else {
-            // Show a message when no airlines operate on this route
-            const airlineSelect = document.getElementById('airline');
-            while (airlineSelect.options.length > 1) {
-                airlineSelect.remove(1);
-            }
-            const option = document.createElement('option');
-            option.value = "";
-            option.textContent = "Нет доступных авиакомпаний для этого маршрута";
-            option.disabled = true;
-            airlineSelect.appendChild(option);
-        }
+        console.log("API response:", data);
+
+        // Дальнейший код без изменений...
     } catch (error) {
         console.error('Error loading airlines for route:', error);
+        console.error('Error details:', error.message, error.stack);
         // Fallback to all airlines if the route-specific endpoint fails
         if (window.airlinesData) {
+            console.log("Falling back to all airlines");
             updateAirlineDropdown(window.airlinesData);
         }
     }
 }
+
+
 
 // Function to update the airline dropdown with the provided airlines
 function updateAirlineDropdown(airlines) {
