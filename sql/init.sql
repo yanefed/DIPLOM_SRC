@@ -137,4 +137,36 @@ VALUES
 
 -- DELETE FROM flights;
 -- DELETE FROM delay;
--- DELETE FROM flight_airport;
+-- DELETE FROM flight_airport_2;
+
+
+-- Добавляем записи для аэропортов отправления, которые отсутствуют
+INSERT INTO flight_airport_2 (flight_id, airport_id, airport_type)
+SELECT
+    CAST(f.id AS INTEGER) AS flight_id,  -- Преобразование строки в число
+    a.id AS airport_id,
+    'departure' AS airport_type
+FROM
+    flights f
+JOIN
+    airports a ON f.origin_airport = a.airport_code
+WHERE
+    NOT EXISTS (
+        SELECT 1 FROM flight_airport_2 fa
+        WHERE fa.flight_id = CAST(f.id AS INTEGER) AND fa.airport_type = 'departure'
+    );
+
+-- Добавляем записи для аэропортов прибытия, которые отсутствуют
+INSERT INTO flight_airport_2 (flight_id, airport_id, airport_type)
+SELECT
+    CAST(f.id AS INTEGER) AS flight_id,  -- Преобразование строки в число
+    a.id AS airport_id,
+    'arrival' AS airport_type
+FROM
+    flights f
+JOIN
+    airports a ON f.dest_airport = a.airport_code
+WHERE
+    NOT EXISTS (
+        SELECT CAST(f.id AS INTEGER) FROM flights f
+    );
