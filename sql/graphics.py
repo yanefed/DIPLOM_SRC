@@ -15,6 +15,16 @@ from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import pandas as pd
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine, text
+import matplotlib as mpl
+import matplotlib.font_manager as font_manager
+
+# Настройка шрифтов для корректного отображения кириллицы
+mpl.rcParams['font.family'] = 'DejaVu Sans'
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
+mpl.rcParams['axes.unicode_minus'] = False  # Корректное отображение минуса
+
+# Увеличиваем размер шрифта для лучшей читаемости
+plt.rcParams['font.size'] = 12
 
 # Подключение к базе данных
 db_host = os.environ.get('POSTGRES_HOST', 'localhost')
@@ -50,7 +60,7 @@ def load_data(table_name='flight_data_for_visualization'):
     print(f"Загрузка данных из таблицы {table_name}...")
 
     session = Session()
-    query = f"SELECT * FROM public.{table_name}"
+    query = f"SELECT * FROM public.{table_name} LIMIT 100"
 
     try:
         # Выполняем запрос напрямую через SQLAlchemy
@@ -108,6 +118,23 @@ def preprocess_data(df):
     return df
 
 
+def configure_plot_for_cyrillic(title=None, xlabel=None, ylabel=None, legend_loc='best'):
+    """
+    Настраивает график для корректного отображения кириллицы и оптимального размещения элементов
+
+    Args:
+        title (str): Заголовок графика
+        xlabel (str): Подпись оси X
+        ylabel (str): Подпись оси Y
+        legend_loc (str): Расположение легенды
+    """
+    if title: plt.title(title, fontsize=14)
+    if xlabel: plt.xlabel(xlabel, fontsize=12)
+    if ylabel: plt.ylabel(ylabel, fontsize=12)
+    if plt.gca().get_legend() is not None:
+        plt.legend(loc=legend_loc, fontsize=11)
+
+
 # Функция для анализа задержек по авиакомпаниям
 def analyze_airline_delays(df):
     """
@@ -122,22 +149,38 @@ def analyze_airline_delays(df):
     plt.figure(figsize=(12, 6))
     airline_counts = df["Reporting_Airline"].value_counts()
     airline_counts.plot(kind='bar')
-    plt.title("Количество рейсов по авиакомпаниям")
-    plt.xlabel("Авиакомпания")
-    plt.ylabel("Количество рейсов")
-    plt.tight_layout()
-    plt.savefig('airline_flight_counts.png')
+    configure_plot_for_cyrillic(
+        title="Количество рейсов по авиакомпаниям",
+        xlabel="Авиакомпания",
+        ylabel="Количество рейсов"
+    )
+    plt.tight_layout(pad=2.0)  # Увеличиваем отступы для предотвращения обрезания текста
+    plt.savefig('./img/airline_flight_counts.png', dpi=300,
+                bbox_inches='tight')  # Увеличиваем разрешение и добавляем bbox_inches
     plt.close()
 
     # 2. Средние задержки по авиакомпаниям
+
     plt.figure(figsize=(15, 8))
+    # Создаем DataFrame с задержками по авиакомпаниям
     airline_delays = df.groupby('Reporting_Airline')[['DepDelay', 'ArrDelay']].mean()
-    airline_delays.sort_values('DepDelay', ascending=False).plot.bar()
-    plt.title("Распределение задержек по разным авиакомпаниям")
-    plt.ylabel('Задержка (мин)')
-    plt.xlabel('Авиакомпании')
-    plt.tight_layout()
-    plt.savefig('airline_delay_distribution.png')
+
+    # Переименовываем колонки на русский язык для легенды
+    airline_delays = airline_delays.rename(columns={
+        'DepDelay': 'Задержка вылета',
+        'ArrDelay': 'Задержка прибытия'
+    })
+
+    # Сортируем по задержке вылета
+    airline_delays.sort_values('Задержка вылета', ascending=False).plot.bar()
+
+    configure_plot_for_cyrillic(
+        title="Распределение задержек по разным авиакомпаниям",
+        xlabel="Авиакомпании",  # Поменял местами, так как это ось X в графике
+        ylabel="Задержка (мин)"  # Поменял местами, так как это ось Y в графике
+    )
+    plt.tight_layout(pad=2.0)
+    plt.savefig('./img/airline_delay_distribution.png', dpi=300, bbox_inches='tight')
     plt.close()
 
     print("Анализ задержек по авиакомпаниям завершен.")
@@ -165,12 +208,14 @@ def analyze_delay_trends(df):
     plt.figure(figsize=(15, 6))
     sns.lineplot(data=monthly_delays, x='YearMonth', y='DepDelay', label='Задержка вылета')
     sns.lineplot(data=monthly_delays, x='YearMonth', y='ArrDelay', label='Задержка прибытия')
-    plt.title('Средние задержки вылета и прибытия по времени')
-    plt.xlabel('Год-Месяц')
-    plt.ylabel('Средняя задержка (минуты)')
+    configure_plot_for_cyrillic(
+        title="Средние задержки вылета и прибытия по времени",
+        xlabel="Год-Месяц",
+        ylabel="Средняя задержка (минуты)"
+    )
     plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.savefig('monthly_delays.png')
+    plt.tight_layout(pad=2.0)
+    plt.savefig('./img/monthly_delays.png')
     plt.close()
 
     # 2. Доля отмененных рейсов по месяцам
@@ -179,12 +224,14 @@ def analyze_delay_trends(df):
 
         plt.figure(figsize=(15, 6))
         sns.lineplot(data=monthly_cancellations, x='YearMonth', y='Cancelled')
-        plt.title('Доля отмененных рейсов по времени')
-        plt.xlabel('Год-Месяц')
-        plt.ylabel('Доля отмененных рейсов')
+        configure_plot_for_cyrillic(
+            title="Доля отмененных рейсов по времени",
+            xlabel="Год-Месяц",
+            ylabel="Доля отмененных рейсов"
+        )
         plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.savefig('monthly_cancellations.png')
+        plt.tight_layout(pad=2.0)
+        plt.savefig('./img/monthly_cancellations.png')
         plt.close()
 
     # 3. Распределение задержек по дням недели
@@ -197,13 +244,17 @@ def analyze_delay_trends(df):
             ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
         )
 
+        day_delays = day_delays.rename(columns={'DepDelay': 'Задержка вылета', 'ArrDelay': 'Задержка прибытия'})
+
         plt.figure(figsize=(12, 6))
         day_delays.plot.bar()
-        plt.title('Средние задержки по дням недели')
-        plt.xlabel('День недели')
-        plt.ylabel('Средняя задержка (минуты)')
-        plt.tight_layout()
-        plt.savefig('delays_by_day_of_week.png')
+        configure_plot_for_cyrillic(
+            title="Средние задержки по дням недели",
+            xlabel="День недели",
+            ylabel="Средняя задержка (минуты)"
+        )
+        plt.tight_layout(pad=2.0)
+        plt.savefig('./img/delays_by_day_of_week.png')
         plt.close()
 
     print("Анализ временных трендов задержек завершен.")
@@ -227,24 +278,28 @@ def analyze_airport_delays(df):
         dep_delays = airport_delays.sort_values('DepDelay', ascending=False).head(20)
         plt.figure(figsize=(15, 6))
         sns.barplot(data=dep_delays, x='Origin', y='DepDelay', hue='Dest', dodge=False)
-        plt.title('Наибольшие средние задержки вылета (топ 20 аэропортов)')
-        plt.ylabel('Средняя задержка вылета (минуты)')
-        plt.xlabel('Аэропорт (отправление)')
+        configure_plot_for_cyrillic(
+            title="Наибольшие средние задержки вылета (топ 20 аэропортов)",
+            xlabel="Средняя задержка вылета (минуты)",
+            ylabel="Аэропорт (отправление)"
+        )
         plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.savefig('top_departure_delays.png')
+        plt.tight_layout(pad=2.0)
+        plt.savefig('./img/top_departure_delays.png')
         plt.close()
 
         # Топ по задержкам прибытия
         arr_delays = airport_delays.sort_values('ArrDelay', ascending=False).head(20)
         plt.figure(figsize=(15, 6))
         sns.barplot(data=arr_delays, x='Origin', y='ArrDelay', hue='Dest', dodge=False)
-        plt.title('Наибольшие средние задержки прибытия (топ 20 аэропортов)')
-        plt.ylabel('Средняя задержка прибытия (минуты)')
-        plt.xlabel('Аэропорт (отправление)')
+        configure_plot_for_cyrillic(
+            title="Наибольшие средние задержки прибытия (топ 20 аэропортов)",
+            xlabel="Средняя задержка прибытия (минуты)",
+            ylabel="Аэропорт (отправление)"
+        )
         plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.savefig('top_arrival_delays.png')
+        plt.tight_layout(pad=2.0)
+        plt.savefig('./img/top_arrival_delays.png')
         plt.close()
 
     print("Анализ задержек по аэропортам завершен.")
@@ -285,12 +340,14 @@ def analyze_delay_causes(df):
 
         plt.figure(figsize=(10, 6))
         sns.barplot(data=delay_averages, x='DelayType', y='AverageDelay', palette='tab10')
-        plt.title('Средняя задержка по причинам')
-        plt.xlabel('Тип задержки')
-        plt.ylabel('Средняя задержка (минуты)')
+        configure_plot_for_cyrillic(
+            title="Средняя задержка по причинам",
+            xlabel="Тип задержки",
+            ylabel="Средняя задержка (минуты)"
+        )
         plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.savefig('delay_causes_bar.png')
+        plt.tight_layout(pad=2.0)
+        plt.savefig('./img/delay_causes_bar.png')
         plt.close()
 
         # 2. Круговая диаграмма причин задержек
@@ -299,8 +356,8 @@ def analyze_delay_causes(df):
                 autopct='%.1f%%', startangle=90)
         plt.title('Распределение задержек по причинам')
         plt.axis('equal')  # Обеспечивает круглую форму диаграммы
-        plt.tight_layout()
-        plt.savefig('delay_causes_pie.png')
+        plt.tight_layout(pad=2.0)
+        plt.savefig('./img/delay_causes_pie.png')
         plt.close()
 
     # 3. Причины отмены рейсов
@@ -324,11 +381,13 @@ def analyze_delay_causes(df):
 
             plt.figure(figsize=(10, 6))
             sns.barplot(x=cancellation_counts.index, y=cancellation_counts.values, palette='tab10')
-            plt.title('Наиболее распространенные причины отмены рейсов')
-            plt.xlabel('Причина отмены')
-            plt.ylabel('Количество')
-            plt.tight_layout()
-            plt.savefig('cancellation_reasons.png')
+            configure_plot_for_cyrillic(
+                title="Наиболее распространенные причины отмены рейсов",
+                xlabel="Причина отмены",
+                ylabel="Количество (ед.)"
+            )
+            plt.tight_layout(pad=2.0)
+            plt.savefig('./img/cancellation_reasons.png')
             plt.close()
 
     print("Анализ причин задержек завершен.")
@@ -352,36 +411,60 @@ def analyze_correlations(df):
     numeric_columns = [col for col in possible_columns if col in df.columns]
 
     if len(numeric_columns) > 1:  # Нужно минимум 2 колонки для корреляции
+        # Словарь для перевода названий колонок на русский
+        column_names_ru = {
+            'Distance': 'Расстояние',
+            'DepDelay': 'Задержка вылета',
+            'ArrDelay': 'Задержка прибытия',
+            'TaxiIn': 'Руление на прилете',
+            'TaxiOut': 'Руление на вылете',
+            'AirTime': 'Время в воздухе',
+            'ActualElapsedTime': 'Фактическое время',
+            'CRSElapsedTime': 'Запланированное время'
+        }
+
         # Вычисляем корреляционную матрицу
         corr_matrix = df[numeric_columns].corr()
 
+        # Переименовываем индексы и колонки
+        corr_matrix_ru = corr_matrix.rename(
+            index=column_names_ru,
+            columns=column_names_ru
+        )
+
         # Создаем тепловую карту
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(corr_matrix, annot=True, cmap="YlOrBr", linewidths=0.6, fmt='.2f')
-        plt.title("Корреляционная матрица факторов полета и задержек")
-        plt.tight_layout()
-        plt.savefig('correlation_heatmap.png')
+        plt.figure(figsize=(12, 10))  # Увеличиваем размер для лучшей читаемости русского текста
+        sns.heatmap(corr_matrix_ru, annot=True, cmap="YlOrBr", linewidths=0.6, fmt='.2f')
+        configure_plot_for_cyrillic(
+            title="Корреляционная матрица факторов полета и задержек"
+        )
+        plt.tight_layout(pad=2.0)
+        plt.savefig('./img/correlation_heatmap.png', dpi=300, bbox_inches='tight')
         plt.close()
 
         # Анализ взаимосвязи между временем руления и задержками
         if all(col in df.columns for col in ['TaxiOut', 'DepDelay']):
             plt.figure(figsize=(10, 6))
             sns.scatterplot(x='TaxiOut', y='DepDelay', data=df.sample(min(5000, len(df))), alpha=0.5)
-            plt.title('Взаимосвязь между временем руления на вылет и задержкой вылета')
-            plt.xlabel('Время руления на вылет (минуты)')
-            plt.ylabel('Задержка вылета (минуты)')
-            plt.tight_layout()
-            plt.savefig('taxiout_depdelay_scatter.png')
+            configure_plot_for_cyrillic(
+                title="Взаимосвязь между временем руления на вылет и задержкой вылета",
+                xlabel="Время руления на вылет (минуты)",
+                ylabel="Задержка вылета (минуты)"
+            )
+            plt.tight_layout(pad=2.0)
+            plt.savefig('./img/taxiout_depdelay_scatter.png')
             plt.close()
 
         if all(col in df.columns for col in ['TaxiIn', 'ArrDelay']):
             plt.figure(figsize=(10, 6))
             sns.scatterplot(x='TaxiIn', y='ArrDelay', data=df.sample(min(5000, len(df))), alpha=0.5)
-            plt.title('Взаимосвязь между временем руления на прилет и задержкой прибытия')
-            plt.xlabel('Время руления на прилет (минуты)')
-            plt.ylabel('Задержка прибытия (минуты)')
-            plt.tight_layout()
-            plt.savefig('taxiin_arrdelay_scatter.png')
+            configure_plot_for_cyrillic(
+                title="Взаимосвязь между временем руления на прилет и задержкой прибытия",
+                xlabel="Время руления на прилет (минуты)",
+                ylabel="Задержка прибытия (минуты)"
+            )
+            plt.tight_layout(pad=2.0)
+            plt.savefig('./img/taxiin_arrdelay_scatter.png')
             plt.close()
 
     print("Анализ корреляций завершен.")
@@ -420,6 +503,26 @@ def build_delay_prediction_models(df, target='ArrDelay'):
 
     # Подготовка данных для моделирования
     data_subset = df[features + [target]].dropna()
+
+    # Проверяем и преобразуем все нечисловые столбцы в числовые
+    for column in data_subset.columns:
+        # Если столбец нечисловой
+        if data_subset[column].dtype == object:
+            print(f"Преобразование нечислового столбца: {column}")
+
+            # Особая обработка для временных столбцов
+            if column in ['CRSDepTime', 'CRSArrTime'] and data_subset[column].astype(str).str.contains(':').any():
+                # Конвертация времени в числовой формат (часы + минуты/60)
+                data_subset[column] = data_subset[column].apply(
+                    lambda x: float(str(x).split(':')[0]) + float(str(x).split(':')[1]) / 60
+                    if isinstance(x, str) and ':' in x else x)
+            else:
+                # Обычное преобразование в числовой формат
+                data_subset[column] = pd.to_numeric(data_subset[column], errors='coerce')
+
+            # Заполнение NaN значений медианой
+            if data_subset[column].isna().any():
+                data_subset[column] = data_subset[column].fillna(data_subset[column].median())
 
     # Преобразование категориальных переменных
     data_model = pd.get_dummies(data_subset, columns=['Month', 'DayOfWeek'], drop_first=True)
@@ -460,11 +563,13 @@ def build_delay_prediction_models(df, target='ArrDelay'):
         ax1 = sns.histplot(y_test, kde=True, stat="density", color='r', label='Фактические значения')
         sns.histplot(y_pred, kde=True, stat="density", color='b', label='Предсказанные значения', ax=ax1)
         plt.legend()
-        plt.xlabel(f"Фактические и предсказанные значения {target} (минуты)")
-        plt.ylabel("Плотность")
-        plt.title(f"Распределение фактических и предсказанных значений {target} - {name}")
+        configure_plot_for_cyrillic(
+            title=f"Распределение фактических и предсказанных значений {target} - {name}",
+            xlabel=f"Фактические и предсказанные значения {target} (минуты)",
+            ylabel="Плотность"
+        )
         plt.tight_layout()
-        plt.savefig(f'{target.lower()}_{name.lower().replace(" ", "_")}_distribution.png')
+        plt.savefig(f'./img/{target.lower()}_{name.lower().replace(" ", "_")}_distribution.png')
         plt.close()
 
         # Визуализация сравнения фактических и предсказанных значений
@@ -475,12 +580,13 @@ def build_delay_prediction_models(df, target='ArrDelay'):
         max_value = max(max(y_test), max(y_pred))
         min_value = min(min(y_test), min(y_pred))
         plt.plot([min_value, max_value], [min_value, max_value], color='red', linestyle='--', lw=2)
-
-        plt.xlabel(f"Фактические значения {target} (минуты)")
-        plt.ylabel(f"Предсказанные значения {target} (минуты)")
-        plt.title(f"Сравнение фактических и предсказанных значений {target} - {name}")
-        plt.tight_layout()
-        plt.savefig(f'{target.lower()}_{name.lower().replace(" ", "_")}_comparison.png')
+        configure_plot_for_cyrillic(
+            title=f"Сравнение фактических и предсказанных значений {target} - {name}",
+            xlabel=f"Фактические значения {target} (минуты)",
+            ylabel=f"Предсказанные значения {target} (минуты)"
+        )
+        plt.tight_layout(pad=2.0)
+        plt.savefig(f'./img/{target.lower()}_{name.lower().replace(" ", "_")}_comparison.png')
         plt.close()
 
     print(f"Построение моделей для {target} завершено.")
@@ -515,6 +621,7 @@ def main():
         return
 
     # Предобработка данных
+    df = pd.DataFrame(df)
     df = preprocess_data(df)
 
     # Вывод основной информации о данных
