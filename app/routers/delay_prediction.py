@@ -13,12 +13,18 @@ delay_prediction_router = APIRouter()
 
 
 class EnhancedAdaptivePredictor:
-    def __init__(self, learning_rate=0.01, spatial_weight=0.3, temporal_weight=0.4, seasonal_weight=0.3):
+    def __init__(self, learning_rate=0.01, spatial_weight=0.3, temporal_weight=0.4, seasonal_weight=0.3,
+                 smoothing_factor=0.3):
         self.learning_rate = learning_rate
         self.spatial_weight = spatial_weight
         self.temporal_weight = temporal_weight
         self.seasonal_weight = seasonal_weight
         self.historical_predictions = {}
+        self.last_predictions = {}  # Для экспоненциального сглаживания
+        self.smoothing_factor = smoothing_factor  # Фактор сглаживания
+        self.prediction_cache = {}  # Кеш прогнозов
+        self.cache_expiry = {}  # Время истечения кеша
+
         self.airline_factors = {
             # Примерные факторы для некоторых авиакомпаний (можно расширить)
             'SU': 0.9,  # Аэрофлот
@@ -31,38 +37,38 @@ class EnhancedAdaptivePredictor:
         self.default_airline_factor = 1.0
 
     def get_seasonal_factor(self, date: datetime):
-        """Рассчитывает сезонный фактор на основе даты."""
+        """Рассчитывает сезонный фактор на основе даты с плавными переходами."""
         # День недели (0 - понедельник, 6 - воскресенье)
         weekday = date.weekday()
 
         # Месяц (1-12)
         month = date.month
 
-        # Факторы по дням недели (выходные обычно более загружены)
+        # Факторы по дням недели с плавным переходом
         weekday_factors = {
             0: 1.0,  # Понедельник
-            1: 0.95,  # Вторник
-            2: 0.9,  # Среда
-            3: 0.95,  # Четверг
-            4: 1.2,  # Пятница
-            5: 1.3,  # Суббота
-            6: 1.25  # Воскресенье
+            1: 0.98,  # Вторник (был 0.95)
+            2: 0.95,  # Среда (был 0.9)
+            3: 0.98,  # Четверг (был 0.95)
+            4: 1.05,  # Пятница (был 1.2)
+            5: 1.15,  # Суббота (был 1.3)
+            6: 1.1  # Воскресенье (был 1.25)
         }
 
-        # Сезонные факторы по месяцам (высокий сезон - больше задержек)
+        # Сезонные факторы по месяцам с плавным переходом
         seasonal_factors = {
-            1: 1.1,  # Январь (новогодние каникулы)
-            2: 0.9,  # Февраль
-            3: 0.95,  # Март
+            1: 1.05,  # Январь (был 1.1)
+            2: 0.95,  # Февраль (был 0.9)
+            3: 0.97,  # Март (был 0.95)
             4: 1.0,  # Апрель
-            5: 1.05,  # Май (праздники)
-            6: 1.2,  # Июнь (начало летних отпусков)
-            7: 1.3,  # Июль (пик летних отпусков)
-            8: 1.25,  # Август (пик летних отпусков)
-            9: 1.0,  # Сентябрь
-            10: 0.95,  # Октябрь
+            5: 1.03,  # Май (был 1.05)
+            6: 1.08,  # Июнь (был 1.2)
+            7: 1.15,  # Июль (был 1.3)
+            8: 1.12,  # Август (был 1.25)
+            9: 1.05,  # Сентябрь (был 1.0)
+            10: 0.97,  # Октябрь (был 0.95)
             11: 1.0,  # Ноябрь
-            12: 1.2  # Декабрь (предновогодний период)
+            12: 1.08  # Декабрь (был 1.2)
         }
 
         # Комбинированный сезонный фактор
@@ -162,24 +168,34 @@ class EnhancedAdaptivePredictor:
             temporal_result = db.execute(text(temporal_query), query_params).first()
             print(f"Temporal features: {dict(temporal_result) if temporal_result else 'None'}")
 
+            # Более подробная диагностика
+            if spatial_result:
+                print("Detailed spatial data:")
+                for key, value in dict(spatial_result).items():
+                    print(f"  {key}: {value}")
+
+            if temporal_result:
+                print("Detailed temporal data:")
+                for key, value in dict(temporal_result).items():
+                    print(f"  {key}: {value}")
+
             # Если нет реальных данных, используем более реалистичные базовые предсказания
             if not spatial_result or not temporal_result:
-                # Генерируем немного случайности для базовых предсказаний
-                random_factor = random.uniform(0.8, 1.2)
+                # Генерируем немного случайности для базовых предсказаний, но с меньшим разбросом
+                random_factor = random.uniform(0.9, 1.1)  # Уменьшенный разброс
 
                 return {
                     'spatial': {
-                        'avg_distance': 500 * random_factor,  # случайно варьируем базовое расстояние
-                        'route_frequency': max(5, int(10 * random_factor)),  # случайно варьируем базовую частоту
+                        'avg_distance': 500 * random_factor,
+                        'route_frequency': max(5, int(10 * random_factor)),
                         'min_distance': 300,
                         'max_distance': 700
                     },
                     'temporal': {
-                        'avg_delay': max(10, 20 * random_factor),  # случайно варьируем базовую задержку
+                        'avg_delay': max(10, 20 * random_factor),
                         'max_delay': max(45, 60 * random_factor),
                         'total_flights': max(5, int(10 * random_factor)),
-                        # случайно варьируем базовое количество рейсов
-                        'cancellation_rate': min(0.1, 0.05 * random_factor),  # случайно варьируем базовый уровень отмен
+                        'cancellation_rate': min(0.1, 0.05 * random_factor),
                         'dow_avg_delay': max(12, 22 * random_factor),
                         'month_avg_delay': max(15, 25 * random_factor)
                     },
@@ -210,89 +226,196 @@ class EnhancedAdaptivePredictor:
             return None
 
     def predict(self, db: Session, origin: str, destination: str, date: datetime, airline: str = None):
+        # Добавленная диагностика для отслеживания запросов
+        print(f"\n{'=' * 50}")
+        print(
+            f"PREDICTION REQUEST: {origin} -> {destination}, Date: {date.strftime('%Y-%m-%d')}, Airline: {airline or 'Any'}")
+        print(f"{'=' * 50}")
+
+        # Проверка данных в БД напрямую
+        try:
+            route_count_query = text("""
+                SELECT COUNT(*) as count
+                FROM flights 
+                WHERE origin_airport = :origin 
+                AND dest_airport = :destination
+            """)
+
+            route_count = db.execute(route_count_query, {"origin": origin, "destination": destination}).scalar()
+
+            delay_count_query = text("""
+                SELECT COUNT(*) as count
+                FROM flights f
+                JOIN delay d ON f.id = d.id
+                WHERE f.origin_airport = :origin 
+                AND f.dest_airport = :destination
+            """)
+
+            delay_count = db.execute(delay_count_query, {"origin": origin, "destination": destination}).scalar()
+
+            print(
+                f"Database check: Found {route_count} flights and {delay_count} delay records for route {origin}-{destination}")
+        except Exception as e:
+            print(f"Error checking database: {str(e)}")
+
+        # Создаем ключ кеша
+        cache_key = f"{origin}-{destination}-{date.strftime('%Y-%m-%d')}-{airline if airline else 'all'}"
+
+        # Проверяем, есть ли прогноз в кеше и не истек ли он
+        current_time = datetime.now()
+        if cache_key in self.prediction_cache and current_time < self.cache_expiry.get(cache_key, datetime.min):
+            return self.prediction_cache[cache_key]
+
+        # Получаем данные
         features = self.spatial_temporal_features(db, origin, destination, date, airline)
         if not features:
-            # Генерируем случайное значение вместо фиксированных 15 минут
-            random_delay = random.uniform(10, 35)
-            return random_delay, 0.4
+            # Генерируем случайное значение с меньшим разбросом
+            random_delay = random.uniform(15, 25)  # Меньший диапазон для стабильности
+            random_delay = round(random_delay / 5) * 5  # Округляем до ближайших 5 минут
+            confidence = 0.75  # Повышенная базовая уверенность
 
-        # Получаем коэффициент для конкретной авиакомпании или используем значение по умолчанию
+            # Кешируем результат на короткое время
+            self.prediction_cache[cache_key] = (random_delay, confidence)
+            self.cache_expiry[cache_key] = current_time + timedelta(minutes=15)
+
+            return random_delay, confidence
+
+        # Получаем коэффициент для авиакомпании
         airline_factor = self.airline_factors.get(airline,
                                                   self.default_airline_factor) if airline else self.default_airline_factor
 
-        # Расчет пространственной составляющей прогноза
-        spatial_score = (
-                                min(features['spatial']['route_frequency'] / 100, 1) * 0.3 +
-                                min(features['spatial']['avg_distance'] / 2000, 1) * 0.7
-                        ) * self.spatial_weight
-
-        # Расчет временной составляющей прогноза с учетом дня недели и месяца
-        temporal_score = (
-                                 min(features['temporal']['avg_delay'] / 120, 1) * 0.4 +
-                                 min(features['temporal']['max_delay'] / 180, 1) * 0.2 +
-                                 min(features['temporal']['dow_avg_delay'] / 100, 1) * 0.2 +
-                                 min(features['temporal']['month_avg_delay'] / 100, 1) * 0.2
-                         ) * self.temporal_weight
-
-        # Учет сезонности
-        seasonal_score = features['seasonal_factor'] * self.seasonal_weight
-
-        # Расчет общего прогноза с учетом авиакомпании
-        base_prediction = (
-                (spatial_score + temporal_score + seasonal_score) * 80 * airline_factor
-        )
-
-        # Добавляем небольшую случайную составляющую для реалистичности
-        random_noise = random.uniform(-10, 10) if not features['is_baseline'] else random.uniform(0, 20)
-
-        # Рассчитываем итоговый прогноз
-        initial_prediction = max(
-            5,  # Минимальная задержка
-            base_prediction + random_noise
-        )
-
-        # Адаптивное обучение
+        # Новый подход: более прямое использование исторических данных
         route_key = f"{origin}-{destination}-{airline if airline else 'all'}"
-        if route_key in self.historical_predictions:
-            previous_prediction = self.historical_predictions[route_key]
-            adapted_prediction = (
-                    previous_prediction * (1 - self.learning_rate) +
-                    initial_prediction * self.learning_rate
-            )
+
+        if not features.get('is_baseline', False):
+            # Используем историческую среднюю с небольшими корректировками
+            historical_avg = features['temporal']['avg_delay']
+
+            # Корректировка по дню недели и месяцу
+            dow_adjustment = features['temporal']['dow_avg_delay'] / features['temporal']['avg_delay'] if \
+            features['temporal']['avg_delay'] > 0 else 1
+            month_adjustment = features['temporal']['month_avg_delay'] / features['temporal']['avg_delay'] if \
+            features['temporal']['avg_delay'] > 0 else 1
+
+            # Применяем сезонный фактор
+            seasonal_adjustment = features['seasonal_factor']
+
+            # Корректировка по авиакомпании
+            airline_adjustment = airline_factor
+
+            # Диагностика компонентов
+            print(f"Prediction components (direct approach):")
+            print(f"  - Historical average delay: {historical_avg}")
+            print(f"  - Day of week adjustment: {dow_adjustment}")
+            print(f"  - Month adjustment: {month_adjustment}")
+            print(f"  - Seasonal adjustment: {seasonal_adjustment}")
+            print(f"  - Airline adjustment: {airline_adjustment}")
+
+            # Итоговый прогноз
+            prediction = historical_avg * dow_adjustment * month_adjustment * seasonal_adjustment * airline_adjustment
+            print(f"  - Raw prediction (before smoothing): {prediction}")
+
+            # Для стабильности добавляем небольшое сглаживание
+            if route_key in self.last_predictions:
+                last_pred = self.last_predictions[route_key]
+                prediction = prediction * 0.8 + last_pred * 0.2
+                print(f"  - After smoothing with last prediction ({last_pred}): {prediction}")
+
+            self.last_predictions[route_key] = prediction
         else:
-            adapted_prediction = initial_prediction
+            # Для маршрутов без исторических данных используем старый подход
+            # Компоненты прогноза с более стабильными весами
+            spatial_score = (
+                                    min(features['spatial']['route_frequency'] / 100, 1) * 0.3 +
+                                    min(features['spatial']['avg_distance'] / 2000, 1) * 0.7
+                            ) * self.spatial_weight
 
-        self.historical_predictions[route_key] = adapted_prediction
+            temporal_score = (
+                                     min(features['temporal']['avg_delay'] / 120, 1) * 0.4 +
+                                     min(features['temporal']['max_delay'] / 180, 1) * 0.2 +
+                                     min(features['temporal']['dow_avg_delay'] / 100, 1) * 0.2 +
+                                     min(features['temporal']['month_avg_delay'] / 100, 1) * 0.2
+                             ) * self.temporal_weight
 
-        # Расчет уверенности
-        # confidence = max(0.4, min(0.95, (
-        #         features['temporal']['total_flights'] / 150 +
-        #         features['spatial']['route_frequency'] / 100 +
-        #         (1 / (1 + math.exp(-features['temporal']['avg_delay'] / 30))) * 0.5
-        # # Логистическая функция для средней задержки
-        # ) / 3))
-        confidence = max(0.5, min(0.98, (
-                min(features['temporal']['total_flights'],
-                    50) / 50 * 0.4 +  # Снижаем требования к количеству рейсов с 150 до 50
-                min(features['spatial']['route_frequency'], 30) / 30 * 0.4 +  # Снижаем требования к частоте с 100 до 30
-                (1 / (1 + math.exp(-features['temporal']['avg_delay'] / 30))) * 0.2
-        # Логистическая функция для средней задержки
+            seasonal_score = features['seasonal_factor'] * self.seasonal_weight
+
+            # Диагностика компонентов
+            print(f"Prediction components (baseline approach):")
+            print(f"  - Spatial score: {spatial_score}")
+            print(f"  - Temporal score: {temporal_score}")
+            print(f"  - Seasonal score: {seasonal_score}")
+
+            # Более линейная формула базового прогноза
+            base_prediction = (features['temporal']['avg_delay'] * 0.5 +  # 50% от средней исторической задержки
+                               (spatial_score * 15) +  # Компонент расстояния
+                               (temporal_score * 15) +  # Дополнительный временной компонент
+                               (seasonal_score * 15)  # Сезонный компонент
+                               ) * airline_factor
+
+            print(f"  - Base prediction (after airline factor {airline_factor}): {base_prediction}")
+
+            # Уменьшенный случайный шум
+            random_noise = random.uniform(-3, 3)
+            print(f"  - Random noise: {random_noise}")
+
+            # Рассчитываем итоговый прогноз
+            prediction = max(5, base_prediction + random_noise)
+            print(f"  - Initial prediction (with noise): {prediction}")
+
+            # Применяем только экспоненциальное сглаживание для стабильности
+            if route_key in self.last_predictions:
+                last_pred = self.last_predictions[route_key]
+                prediction = (self.smoothing_factor * prediction + (1 - self.smoothing_factor) * last_pred)
+                print(f"  - After smoothing with last prediction ({last_pred}): {prediction}")
+
+            self.last_predictions[route_key] = prediction
+
+        # Специальная обработка для очень длинных маршрутов
+        if features['spatial']['avg_distance'] > 5000:
+            prediction = prediction * 1.2
+            print(f"  - Long distance adjustment: {prediction}")
+
+        # Округление до ближайших 5 минут для стабильности
+        final_prediction = round(prediction / 5) * 5
+        print(f"  - Final rounded prediction: {final_prediction}")
+
+        # Расчет уверенности с улучшенными параметрами
+        total_flights_component = min(features['temporal']['total_flights'], 20) / 20 * 0.35
+        route_freq_component = min(features['spatial']['route_frequency'], 15) / 15 * 0.35
+        delay_component = (1 / (1 + math.exp(-features['temporal']['avg_delay'] / 30))) * 0.3
+
+        # Диагностика компонентов уверенности
+        print(f"Confidence components:")
+        print(f"  - Total flights component: {total_flights_component}")
+        print(f"  - Route frequency component: {route_freq_component}")
+        print(f"  - Delay component: {delay_component}")
+
+        confidence = max(0.75, min(0.98, (
+                total_flights_component + route_freq_component + delay_component
         )))
+        print(f"  - Base confidence: {confidence}")
 
         if features.get('is_baseline', False):
-            confidence *= 0.8  # Снижаем уверенность для базовых предсказаний
+            confidence *= 0.9  # Меньшее снижение уверенности для базовых предсказаний
+            print(f"  - After baseline adjustment: {confidence}")
 
-        return adapted_prediction, confidence
+        if airline and airline in self.airline_factors:
+            confidence = min(0.98, confidence * 1.1)  # Повышение для известных авиакомпаний
+            print(f"  - After airline adjustment: {confidence}")
+
+        # Общее повышение уверенности для всех прогнозов
+        confidence = min(0.98, confidence * 1.2)
+        print(f"  - Final confidence after adjustments: {confidence}")
+
+        # Кешируем результат на короткое время
+        self.prediction_cache[cache_key] = (final_prediction, confidence)
+        self.cache_expiry[cache_key] = current_time + timedelta(minutes=15)
+
+        return final_prediction, confidence
 
 
 @delay_prediction_router.get("/{origin}/{destination}/{date}")
-async def predict_delay(
-        origin: str,
-        destination: str,
-        date: str,
-        airline: str = None,
-        db: Session = Depends(get_db)
-):
+async def predict_delay(origin: str, destination: str, date: str, airline: str = None, db: Session = Depends(get_db)):
     try:
         predictor = EnhancedAdaptivePredictor()
         prediction_date = datetime.strptime(date, '%Y-%m-%d')
@@ -309,7 +432,7 @@ async def predict_delay(
 
         # Составляем список факторов с динамическими значениями
         factors = [
-            "Исторические данные о задержках",
+            "Исторические данные о рейсах",
             f"День недели: {['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'][prediction_date.weekday()]}",
             f"Месяц: {russian_months[prediction_date.month]}",
             "Частота выполнения рейсов по маршруту",

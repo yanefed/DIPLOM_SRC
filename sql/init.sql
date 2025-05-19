@@ -140,33 +140,79 @@ VALUES
 -- DELETE FROM flight_airport_2;
 
 
--- Добавляем записи для аэропортов отправления, которые отсутствуют
-INSERT INTO flight_airport_2 (flight_id, airport_id, airport_type)
-SELECT
-    CAST(f.id AS INTEGER) AS flight_id,  -- Преобразование строки в число
-    a.id AS airport_id,
-    'departure' AS airport_type
-FROM
-    flights f
-JOIN
-    airports a ON f.origin_airport = a.airport_code
-WHERE
-    NOT EXISTS (
-        SELECT 1 FROM flight_airport_2 fa
-        WHERE fa.flight_id = CAST(f.id AS INTEGER) AND fa.airport_type = 'departure'
-    );
 
--- Добавляем записи для аэропортов прибытия, которые отсутствуют
-INSERT INTO flight_airport_2 (flight_id, airport_id, airport_type)
+CREATE TABLE flight_data_for_visualization AS
 SELECT
-    CAST(f.id AS INTEGER) AS flight_id,  -- Преобразование строки в число
-    a.id AS airport_id,
-    'arrival' AS airport_type
+    f.fl_date AS "FlightDate",
+    EXTRACT(YEAR FROM f.fl_date) AS "Year",
+    EXTRACT(MONTH FROM f.fl_date) AS "Month",
+    EXTRACT(DAY FROM f.fl_date) AS "DayofMonth",
+    EXTRACT(DOW FROM f.fl_date) + 1 AS "DayOfWeek", -- PostgreSQL DOW: 0 (Sunday) to 6 (Saturday)
+    f.airline_code AS "Reporting_Airline",
+    a.airline_name AS "Airline_Name",
+    f.origin_airport AS "Origin",
+    org.airport_city AS "OriginCityName",
+    org.airport_state AS "OriginState",
+    f.dest_airport AS "Dest",
+    dst.airport_city AS "DestCityName",
+    dst.airport_state AS "DestState",
+    f.distance AS "Distance",
+    f.dep_time AS "CRSDepTime",
+    f.arr_time AS "CRSArrTime",
+    f.air_time AS "AirTime",
+    p.tail_num AS "Tail_Number",
+    p.plane_type AS "Aircraft_Type",
+    p.number_of_seats AS "Seats",
+    d.dep_delay AS "DepDelay",
+    d.arr_delay AS "ArrDelay",
+    CASE
+        WHEN d.dep_delay > 0 THEN
+            CASE
+                WHEN d.dep_delay >= 15 AND d.dep_delay < 60 THEN 'Small Delay'
+                WHEN d.dep_delay >= 60 AND d.dep_delay < 180 THEN 'Medium Delay'
+                WHEN d.dep_delay >= 180 THEN 'Large Delay'
+                ELSE 'No Delay'
+            END
+        ELSE 'No Delay'
+    END AS "DelayCategory",
+    d.cancelled AS "Cancelled",
+    d.cancellation_code AS "CancellationCode",
+    CASE
+        WHEN d.cancellation_code = 'A' THEN (d.dep_delay + COALESCE(d.arr_delay, 0))
+        ELSE 0
+    END AS "CarrierDelay",
+    CASE
+        WHEN d.cancellation_code = 'B' THEN (d.dep_delay + COALESCE(d.arr_delay, 0))
+        ELSE 0
+    END AS "WeatherDelay",
+    CASE
+        WHEN d.cancellation_code = 'C' THEN (d.dep_delay + COALESCE(d.arr_delay, 0))
+        ELSE 0
+    END AS "NASDelay",
+    CASE
+        WHEN d.cancellation_code = 'D' THEN (d.dep_delay + COALESCE(d.arr_delay, 0))
+        ELSE 0
+    END AS "SecurityDelay",
+    CASE
+        WHEN d.cancellation_code IS NULL OR d.cancellation_code = '' THEN
+            (d.dep_delay + COALESCE(d.arr_delay, 0))
+        ELSE 0
+    END AS "LateAircraftDelay",
+    0 AS "TaxiIn", -- Предполагаемые значения, так как нет в вашей БД
+    0 AS "TaxiOut", -- Предполагаемые значения, так как нет в вашей БД
+    f.air_time AS "ActualElapsedTime",
+    f.air_time AS "CRSElapsedTime" -- Предполагаем что запланированное время = фактическому
 FROM
-    flights f
-JOIN
-    airports a ON f.dest_airport = a.airport_code
-WHERE
-    NOT EXISTS (
-        SELECT CAST(f.id AS INTEGER) FROM flights f
-    );
+    public.flights f
+LEFT JOIN
+    public.delay d ON f.id = d.id
+LEFT JOIN
+    public.airlines a ON f.airline_code = a.airline_code
+LEFT JOIN
+    public.planes p ON f.tail_num = p.tail_num
+LEFT JOIN
+    public.airports org ON f.origin_airport = org.airport_code
+LEFT JOIN
+    public.airports dst ON f.dest_airport = dst.airport_code
+ORDER BY
+    f.fl_date;
