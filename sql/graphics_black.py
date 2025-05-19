@@ -19,8 +19,8 @@ import matplotlib as mpl
 import matplotlib.font_manager as font_manager
 
 # Настройка шрифтов для корректного отображения кириллицы
-mpl.rcParams['font.family'] = 'Times New Roman'
-plt.rcParams['font.sans-serif'] = ['Times New Roman']
+mpl.rcParams['font.family'] = 'DejaVu Sans'
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
 mpl.rcParams['axes.unicode_minus'] = False  # Корректное отображение минуса
 
 # Стандартные размеры графиков
@@ -115,7 +115,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=pd.errors.DtypeWarning)
 
 
-def load_data(table_name='flight_data_for_visualization'):
+def load_data(table_name='flight_data_for_visualization', sample_size=100):
     """
     Загружает данные о рейсах из базы данных PostgreSQL
 
@@ -128,7 +128,11 @@ def load_data(table_name='flight_data_for_visualization'):
     print(f"Загрузка данных из таблицы {table_name}...")
 
     session = Session()
-    query = f"SELECT * FROM public.{table_name} LIMIT 100"
+    query = f"""SELECT * 
+                FROM public.{table_name} 
+                ORDER BY md5(random()::text) 
+                LIMIT {sample_size}
+            """
 
     try:
         # Выполняем запрос напрямую через SQLAlchemy
@@ -257,7 +261,7 @@ def analyze_airline_delays(df):
 
     configure_plot_for_cyrillic(
         title="Распределение задержек по разным авиакомпаниям",
-        xlabel="Авиакомпании",
+        xlabel="Авиакомпания",
         ylabel="Задержка (мин)",
         legend_loc='upper right'
     )
@@ -823,7 +827,7 @@ def build_delay_prediction_models(df, target='ArrDelay'):
         print(f"MAE: {mae:.2f}")
 
         # Русское название целевой переменной
-        target_ru = "Задержка прибытия" if target == "ArrDelay" else "Задержка вылета"
+        target_ru = "задержки прибытия" if target == "ArrDelay" else "задержки вылета"
 
         # Визуализация распределения фактических и предсказанных значений (оптимизировано для черно-белой печати)
         plt.figure(figsize=FIGURE_SIZE_STANDARD)
@@ -848,8 +852,8 @@ def build_delay_prediction_models(df, target='ArrDelay'):
         plt.plot(x_range, kde_pred(x_range), 'k--', linewidth=2, label='_nolegend_')
 
         configure_plot_for_cyrillic(
-            title=f"Распределение фактических и предсказанных значений {target_ru}\nМодель: {model_names_ru[name]}",
-            xlabel=f"Значения {target_ru} (минуты)",
+            title=f"Распределение фактических и предсказанных значений\nМодель: {model_names_ru[name]}",
+            xlabel=f"Значение {target_ru} (минуты)",
             ylabel="Плотность",
             legend_loc='upper right'
         )
@@ -878,8 +882,8 @@ def build_delay_prediction_models(df, target='ArrDelay'):
 
         configure_plot_for_cyrillic(
             title=f"Сравнение фактических и предсказанных значений {target_ru}\nМодель: {model_names_ru[name]}",
-            xlabel=f"Фактические значения {target_ru} (минуты)",
-            ylabel=f"Предсказанные значения {target_ru} (минуты)"
+            xlabel=f"Фактическое значение {target_ru} (минуты)",
+            ylabel=f"Предсказанное значение {target_ru} (минуты)"
         )
 
         # Добавляем аннотацию с метриками
