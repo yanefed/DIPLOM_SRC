@@ -68,7 +68,7 @@ def set_plotting_style():
     plt.rcParams['lines.markeredgewidth'] = 1.5
 
 
-def configure_plot_for_cyrillic(title=None, xlabel=None, ylabel=None, legend_loc='best'):
+def configure_plot_for_cyrillic(title=None, xlabel=None, ylabel=None, legend_loc='best', legend_ncol=1):
     """
     Настраивает график для корректного отображения кириллицы и оптимального размещения элементов
 
@@ -77,18 +77,38 @@ def configure_plot_for_cyrillic(title=None, xlabel=None, ylabel=None, legend_loc
         xlabel (str): Подпись оси X
         ylabel (str): Подпись оси Y
         legend_loc (str): Расположение легенды
+        legend_ncol (int): Количество колонок в легенде
     """
     if title: plt.title(title, fontsize=16, pad=15, fontweight='bold')
     if xlabel: plt.xlabel(xlabel, fontsize=14, labelpad=10, fontweight='bold')
     if ylabel: plt.ylabel(ylabel, fontsize=14, labelpad=10, fontweight='bold')
-    if plt.gca().get_legend() is not None:
-        plt.legend(loc=legend_loc, fontsize=12, frameon=True, framealpha=0.9,
-                   edgecolor='black', facecolor='white')
 
-    # Добавляем сетку, которая хорошо видна на черно-белой печати
+    # Более гибкое управление легендой
+    handles, labels = plt.gca().get_legend_handles_labels()
+    if handles and labels:
+        # Определяем, нужно ли размещать легенду за пределами графика
+        if legend_loc in ['outside right', 'outside bottom']:
+            if legend_loc == 'outside right':
+                plt.legend(handles, labels,
+                          loc='center left',
+                          bbox_to_anchor=(1.02, 0.5),
+                          fontsize=12, frameon=True,
+                          framealpha=0.9, edgecolor='black',
+                          facecolor='white', ncol=legend_ncol)
+            elif legend_loc == 'outside bottom':
+                plt.legend(handles, labels,
+                          loc='upper center',
+                          bbox_to_anchor=(0.5, -0.15),
+                          fontsize=12, frameon=True,
+                          framealpha=0.9, edgecolor='black',
+                          facecolor='white', ncol=legend_ncol)
+        else:
+            plt.legend(handles, labels, loc=legend_loc,
+                      fontsize=12, frameon=True,
+                      framealpha=0.9, edgecolor='black',
+                      facecolor='white', ncol=legend_ncol)
+
     plt.grid(True, linestyle=':', alpha=0.7, linewidth=1.0)
-
-    # Делаем ободок графика более заметным
     plt.gca().spines['top'].set_linewidth(1.5)
     plt.gca().spines['right'].set_linewidth(1.5)
     plt.gca().spines['bottom'].set_linewidth(1.5)
@@ -115,7 +135,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=pd.errors.DtypeWarning)
 
 
-def load_data(table_name='flight_data_for_visualization', sample_size=100):
+def load_data(table_name='flight_data_for_visualization', sample_size=10000):
     """
     Загружает данные о рейсах из базы данных PostgreSQL
 
@@ -207,7 +227,7 @@ def analyze_airline_delays(df):
     # Создаем черно-белый барплот с шаблонной заливкой для лучшего различения
     ax = plt.gca()
     bars = ax.bar(range(len(airline_counts)), airline_counts, color='white',
-                  edgecolor='black', linewidth=1.5)
+                  edgecolor='black', linewidth=1.5, label='Количество рейсов')  # Добавлен label
 
     # Добавляем различные штриховки для каждого столбца
     for i, bar in enumerate(bars):
@@ -220,12 +240,14 @@ def analyze_airline_delays(df):
     # Настраиваем оси
     plt.xticks(range(len(airline_counts)), airline_counts.index, rotation=45)
 
+    ax.legend(loc='upper right')
     configure_plot_for_cyrillic(
         title="Количество рейсов по авиакомпаниям",
         xlabel="Авиакомпания",
-        ylabel="Количество рейсов"
+        ylabel="Количество рейсов",
+        legend_loc='upper right'  # Добавлено расположение легенды
     )
-    plt.tight_layout(pad=2.0)
+    plt.tight_layout(pad=10.0)
     plt.savefig('./img_black/airline_flight_counts.png', dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -262,7 +284,7 @@ def analyze_airline_delays(df):
     configure_plot_for_cyrillic(
         title="Распределение задержек по разным авиакомпаниям",
         xlabel="Авиакомпания",
-        ylabel="Задержка (мин)",
+        ylabel="Задержка (минуты)",
         legend_loc='upper right'
     )
 
@@ -271,9 +293,9 @@ def analyze_airline_delays(df):
     ax.set_xticklabels(airline_delays_sorted.index, rotation=45, ha='right')
 
     # Добавляем легенду с пояснениями штриховок
-    ax.legend([bars1[0], bars2[0]], ['Задержка вылета', 'Задержка прибытия'])
+    ax.legend([bars1[0], bars2[0]], ['Задержка вылета', 'Задержка прибытия'], fontsize=10)
 
-    plt.tight_layout(pad=2.0)
+    plt.tight_layout(pad=10.0)
     plt.savefig('./img_black/airline_delay_distribution.png', dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -283,12 +305,12 @@ def analyze_airline_delays(df):
 # Функция для анализа временных трендов задержек
 def analyze_delay_trends(df):
     """
-    Создает графики для анализа трендов задержек по времени
+    Создает графики для анализа трендов задержек и отмен по времени
 
     Args:
         df (DataFrame): DataFrame с данными о рейсах
     """
-    print("Анализ временных трендов задержек...")
+    print("Анализ временных трендов задержек и отмен...")
 
     # Создаем поле Year-Month для группировки
     if 'Year' in df.columns and 'Month' in df.columns:
@@ -297,7 +319,9 @@ def analyze_delay_trends(df):
         df['YearMonth'] = df['FlightDate'].dt.strftime('%Y-%m')
 
     # 1. Средние задержки вылета и прибытия по месяцам
-    monthly_delays = df.groupby('YearMonth')[['DepDelay', 'ArrDelay']].mean().reset_index()
+    # Используем только не отмененные рейсы для расчета задержек
+    non_cancelled = df[df['Cancelled'] == 0].copy()
+    monthly_delays = non_cancelled.groupby('YearMonth')[['DepDelay', 'ArrDelay']].mean().reset_index()
 
     # Переименовываем колонки для русских подписей в легенде
     monthly_delays = monthly_delays.rename(columns={
@@ -317,42 +341,115 @@ def analyze_delay_trends(df):
              color='black', label='Задержка прибытия')
 
     configure_plot_for_cyrillic(
-        title="Средние задержки вылета и прибытия по времени",
+        title="Средние задержки вылета и прибытия по месяцам",
         xlabel="Год-Месяц",
         ylabel="Средняя задержка (минуты)",
         legend_loc='upper right'
     )
     plt.xticks(rotation=45)
-    plt.tight_layout(pad=2.0)
+    plt.tight_layout(pad=10.0)
     plt.savefig('./img_black/monthly_delays.png', dpi=300, bbox_inches='tight')
     plt.close()
 
     # 2. Доля отмененных рейсов по месяцам
     if 'Cancelled' in df.columns:
         monthly_cancellations = df.groupby('YearMonth')['Cancelled'].mean().reset_index()
+        monthly_cancellations['Доля отмененных (%)'] = monthly_cancellations['Cancelled'] * 100
 
         plt.figure(figsize=FIGURE_SIZE_WIDE)
-        plt.plot(monthly_cancellations['YearMonth'], monthly_cancellations['Cancelled'],
-                 linestyle='-', linewidth=2, marker='D', markersize=8,
-                 color='black')
+        bars = plt.bar(monthly_cancellations['YearMonth'], monthly_cancellations['Доля отмененных (%)'],
+                       color='white', edgecolor='black', linewidth=1.5, label='Доля отмененных рейсов')  # Добавлен label
+
+        # Добавляем штриховку для лучшей различимости при ч/б печати
+        for bar in bars:
+            bar.set_hatch('///')
+
+        # Добавляем значения над столбцами
+        for i, v in enumerate(monthly_cancellations['Доля отмененных (%)']):
+            if v > 0:  # Только для ненулевых значений
+                plt.text(i, v + 0.1, f"{v:.1f}%", ha='center', fontweight='bold')
 
         configure_plot_for_cyrillic(
-            title="Доля отмененных рейсов по времени",
+            title="Доля отмененных рейсов по месяцам",
             xlabel="Год-Месяц",
-            ylabel="Доля отмененных рейсов"
+            ylabel="Доля отмененных рейсов (%)",
+            legend_loc='upper right'  # Добавлено расположение легенды
         )
         plt.xticks(rotation=45)
-        plt.tight_layout(pad=2.0)
+        plt.tight_layout(pad=10.0)
         plt.savefig('./img_black/monthly_cancellations.png', dpi=300, bbox_inches='tight')
         plt.close()
 
-    # 3. Распределение задержек по дням недели
+        # 3. НОВЫЙ ГРАФИК: Распределение причин отмены по месяцам
+        if 'CancellationCode' in df.columns:
+            # Фильтруем только отмененные рейсы
+            cancelled_flights = df[df['Cancelled'] == 1].copy()
+
+            if not cancelled_flights.empty:
+                # Создаем словарь для расшифровки кодов отмены
+                cancellation_codes = {
+                    'A': 'Авиакомпания',
+                    'B': 'Погода',
+                    'C': 'Нац. авиасистема',
+                    'D': 'Безопасность'
+                }
+
+                # Преобразуем коды в названия причин
+                cancelled_flights['Причина отмены'] = cancelled_flights['CancellationCode'].map(
+                    lambda x: cancellation_codes.get(x, 'Неизвестно') if pd.notnull(x) else 'Неизвестно'
+                )
+
+                # Группируем по месяцам и причинам
+                monthly_reasons = cancelled_flights.groupby(['YearMonth', 'Причина отмены']).size().unstack(
+                    fill_value=0)
+
+                # Если есть данные, строим график
+                if not monthly_reasons.empty:
+                    # Создаем график
+                    fig, ax = plt.subplots(figsize=FIGURE_SIZE_WIDE)
+
+                    # Получаем причины отмены
+                    reasons = list(monthly_reasons.columns)
+
+                    # Создаем цветовую схему для ч/б печати
+                    hatches = ['////', '\\\\\\\\', 'xxxx', '....', 'oooo']
+
+                    # Рисуем накопительную гистограмму
+                    bottom = np.zeros(len(monthly_reasons))
+                    bars_by_reason = []
+
+                    for i, reason in enumerate(reasons):
+                        if reason in monthly_reasons.columns:
+                            bars = ax.bar(monthly_reasons.index, monthly_reasons[reason],
+                                          bottom=bottom, color='white', edgecolor='black',
+                                          linewidth=1.5, label=reason)
+                            bottom += monthly_reasons[reason]
+                            bars_by_reason.append(bars)
+
+                            # Добавляем штриховку
+                            for bar in bars:
+                                bar.set_hatch(hatches[i % len(hatches)])
+
+                    # Настраиваем график
+                    configure_plot_for_cyrillic(
+                        title="Распределение причин отмены рейсов по месяцам",
+                        xlabel="Год-Месяц",
+                        ylabel="Количество отмененных рейсов",
+                        legend_loc='upper right'
+                    )
+                    plt.xticks(rotation=45)
+                    plt.tight_layout(pad=10.0)
+                    plt.legend(title='Причины отмены')
+                    plt.savefig('./img_black/monthly_cancellation_reasons.png', dpi=300, bbox_inches='tight')
+                    plt.close()
+
+    # 4. Распределение задержек по дням недели
     if 'DayOfWeek' in df.columns:
         day_mapping = {1: 'Понедельник', 2: 'Вторник', 3: 'Среда',
                        4: 'Четверг', 5: 'Пятница', 6: 'Суббота', 7: 'Воскресенье'}
 
-        df['DayName'] = df['DayOfWeek'].map(day_mapping)
-        day_delays = df.groupby('DayName')[['DepDelay', 'ArrDelay']].mean().reindex(
+        non_cancelled['DayName'] = non_cancelled['DayOfWeek'].map(day_mapping)
+        day_delays = non_cancelled.groupby('DayName')[['DepDelay', 'ArrDelay']].mean().reindex(
             ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
         )
 
@@ -385,13 +482,112 @@ def analyze_delay_trends(df):
         ax.set_xticklabels(day_delays.index, rotation=45, ha='right')
 
         # Добавляем легенду с пояснениями штриховок
-        ax.legend([bars1[0], bars2[0]], ['Задержка вылета', 'Задержка прибытия'])
+        ax.legend([bars1[0], bars2[0]], ['Задержка вылета', 'Задержка прибытия'], fontsize=10)
 
-        plt.tight_layout(pad=2.0)
+        plt.tight_layout(pad=10.0)
         plt.savefig('./img_black/delays_by_day_of_week.png', dpi=300, bbox_inches='tight')
         plt.close()
 
-    print("Анализ временных трендов задержек завершен.")
+        # 5. НОВЫЙ ГРАФИК: Распределение отмен по дням недели
+        if 'Cancelled' in df.columns:
+            # Только отмененные рейсы
+            cancelled_flights = df[df['Cancelled'] == 1].copy()
+
+            if not cancelled_flights.empty:
+                # Добавляем названия дней недели
+                cancelled_flights['DayName'] = cancelled_flights['DayOfWeek'].map(day_mapping)
+
+                # Группируем по дням недели
+                day_cancellations = cancelled_flights.groupby('DayName').size()
+
+                # Обеспечиваем правильный порядок дней недели
+                if not day_cancellations.empty:
+                    day_cancellations = day_cancellations.reindex(
+                        ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'],
+                        fill_value=0
+                    )
+
+                    # Создаем график
+                    fig, ax = plt.subplots(figsize=FIGURE_SIZE_STANDARD)
+
+                    # Столбцы для отмен
+                    bars = ax.bar(day_cancellations.index, day_cancellations.values,
+                                  color='white', edgecolor='black', linewidth=1.5, hatch='xxxx',
+                                  label='Количество отмененных рейсов')  # Добавлен label
+
+                    # # Добавляем значения над столбцами
+                    # for i, v in enumerate(day_cancellations.values):
+                    #     if v > 0:  # Только для ненулевых значений
+                    #         ax.text(i, v + 0.1, str(v), ha='center', fontweight='bold')
+
+                    configure_plot_for_cyrillic(
+                        title="Количество отмененных рейсов по дням недели",
+                        xlabel="День недели",
+                        ylabel="Количество отмененных рейсов",
+                        legend_loc='upper right'  # Добавлено расположение легенды
+                    )
+
+                    plt.xticks(rotation=45, ha='right')
+                    plt.tight_layout(pad=10.0)
+                    plt.savefig('./img_black/cancellations_by_day_of_week.png', dpi=300, bbox_inches='tight')
+                    plt.close()
+
+                    # 6. НОВЫЙ ГРАФИК: Причины отмен по дням недели
+                    if 'CancellationCode' in df.columns:
+                        # Словарь для расшифровки кодов отмены
+                        cancellation_codes = {
+                            'A': 'Авиакомпания',
+                            'B': 'Погода',
+                            'C': 'Нац. авиасистема',
+                            'D': 'Безопасность'
+                        }
+
+                        # Преобразуем коды в названия причин
+                        cancelled_flights['Причина отмены'] = cancelled_flights['CancellationCode'].map(
+                            lambda x: cancellation_codes.get(x, 'Неизвестно') if pd.notnull(x) else 'Неизвестно'
+                        )
+
+                        # Группируем по дням недели и причинам
+                        day_reasons = cancelled_flights.groupby(['DayName', 'Причина отмены']).size().unstack(
+                            fill_value=0)
+
+                        # Обеспечиваем правильный порядок дней недели
+                        day_reasons = day_reasons.reindex(
+                            ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'],
+                            fill_value=0
+                        )
+
+                        # Создаем график
+                        fig, ax = plt.subplots(figsize=FIGURE_SIZE_STANDARD)
+
+                        # Создаем накопительную гистограмму
+                        bottom = np.zeros(len(day_reasons))
+                        bars_by_reason = []
+
+                        for i, reason in enumerate(day_reasons.columns):
+                            bars = ax.bar(day_reasons.index, day_reasons[reason],
+                                          bottom=bottom, color='white', edgecolor='black',
+                                          linewidth=1.5, label=reason)
+                            bottom += day_reasons[reason]
+                            bars_by_reason.append(bars)
+
+                            # Добавляем штриховку
+                            for bar in bars:
+                                bar.set_hatch(HATCH_PATTERNS[i % len(HATCH_PATTERNS)])
+
+                        configure_plot_for_cyrillic(
+                            title="Причины отмены рейсов по дням недели",
+                            xlabel="День недели",
+                            ylabel="Количество отмененных рейсов",
+                            legend_loc='upper right'
+                        )
+
+                        plt.xticks(rotation=45, ha='right')
+                        plt.tight_layout(pad=10.0)
+                        plt.savefig('./img_black/cancellation_reasons_by_day.png', dpi=300, bbox_inches='tight')
+                        plt.close()
+
+    print("Анализ временных трендов задержек и отмен завершен.")
 
 
 # Функция для анализа задержек по аэропортам
@@ -426,7 +622,7 @@ def analyze_airport_delays(df):
 
         # Создаем столбчатый график с черно-белыми столбцами и разной штриховкой
         bars = ax.bar(x, dep_delays['Задержка вылета'], color='white',
-                      edgecolor='black', linewidth=1.5)
+                      edgecolor='black', linewidth=1.5, label='Задержка вылета')  # Добавлен label
 
         # Добавляем разные штриховки для различения аэропортов
         for i, bar in enumerate(bars):
@@ -435,7 +631,8 @@ def analyze_airport_delays(df):
         configure_plot_for_cyrillic(
             title='Наибольшие средние задержки вылета (топ 10 аэропортов)',
             xlabel='Аэропорт вылета',
-            ylabel='Средняя задержка вылета (минуты)'
+            ylabel='Средняя задержка вылета (минуты)',
+            legend_loc='upper right'  # Добавлено расположение легенды
         )
 
         # Устанавливаем метки на оси X
@@ -451,7 +648,7 @@ def analyze_airport_delays(df):
                         ha='center',
                         fontweight='bold')
 
-        plt.tight_layout(pad=2.0)
+        plt.tight_layout(pad=10.0)
         plt.savefig('./img_black/top_departure_delays_by_airport.png', dpi=300, bbox_inches='tight')
         plt.close()
 
@@ -467,7 +664,7 @@ def analyze_airport_delays(df):
 
         # Создаем столбчатый график с черно-белыми столбцами и разной штриховкой
         bars = ax.bar(x, arr_delays['Задержка прибытия'], color='white',
-                      edgecolor='black', linewidth=1.5)
+                      edgecolor='black', linewidth=1.5, label='Задержка прибытия')  # Добавлен label
 
         # Добавляем разные штриховки для различения аэропортов
         for i, bar in enumerate(bars):
@@ -476,7 +673,8 @@ def analyze_airport_delays(df):
         configure_plot_for_cyrillic(
             title='Наибольшие средние задержки прибытия (топ 10 аэропортов)',
             xlabel='Аэропорт прибытия',
-            ylabel='Средняя задержка прибытия (минуты)'
+            ylabel='Средняя задержка прибытия (минуты)',
+            legend_loc='upper right'  # Добавлено расположение легенды
         )
 
         # Устанавливаем метки на оси X
@@ -492,7 +690,7 @@ def analyze_airport_delays(df):
                         ha='center',
                         fontweight='bold')
 
-        plt.tight_layout(pad=2.0)
+        plt.tight_layout(pad=10.0)
         plt.savefig('./img_black/top_arrival_delays_by_airport.png', dpi=300, bbox_inches='tight')
         plt.close()
 
@@ -502,155 +700,296 @@ def analyze_airport_delays(df):
 # Функция для анализа причин задержек
 def analyze_delay_causes(df):
     """
-    Создает графики для анализа причин задержек
+    Создает графики для анализа причин задержек и отмен рейсов
 
     Args:
         df (DataFrame): DataFrame с данными о рейсах
     """
-    print("Анализ причин задержек...")
+    print("Анализ причин задержек и отмен рейсов...")
 
     # Проверка наличия колонок с причинами задержек
     delay_causes = ['CarrierDelay', 'WeatherDelay', 'NASDelay', 'SecurityDelay', 'LateAircraftDelay']
     if not all(cause in df.columns for cause in delay_causes):
-        print("Данные о причинах задержек отсутствуют. Пропускаем анализ.")
+        print("Данные о причинах задержек отсутствуют. Пропускаем анализ задержек.")
+        has_delay_causes = False
+    else:
+        has_delay_causes = True
+
+    # Проверка наличия данных об отменах рейсов
+    if 'Cancelled' not in df.columns or 'CancellationCode' not in df.columns:
+        print("Данные об отменах рейсов отсутствуют. Пропускаем анализ отмен.")
+        has_cancellation_data = False
+    else:
+        has_cancellation_data = True
+
+    # Если нет ни данных о задержках, ни данных об отменах, выходим
+    if not has_delay_causes and not has_cancellation_data:
+        print("Недостаточно данных для анализа причин задержек и отмен.")
         return
 
-    # 1. Средние значения разных типов задержек
-    avg_delays = pd.DataFrame({
-        'Причина': ['Авиакомпания', 'Погода', 'Авиадиспетчеры', 'Безопасность', 'Позднее прибытие самолета'],
-        'Средняя задержка': [
-            df['CarrierDelay'].mean(),
-            df['WeatherDelay'].mean(),
-            df['NASDelay'].mean(),
-            df['SecurityDelay'].mean(),
-            df['LateAircraftDelay'].mean()
-        ]
-    })
+    # ЧАСТЬ 1: АНАЛИЗ ПРИЧИН ЗАДЕРЖЕК (если данные доступны)
+    if has_delay_causes:
+        # 1.1. Средние значения разных типов задержек
+        # Исключаем отмененные рейсы при анализе задержек, если данные об отменах доступны
+        delay_df = df.copy()
+        if has_cancellation_data:
+            delay_df = delay_df[delay_df['Cancelled'] == 0]
 
-    # Создаем график со штриховками
-    fig, ax = plt.subplots(figsize=FIGURE_SIZE_STANDARD)
+        # Обрабатываем нулевые значения: они означают, что рейс не был задержан по этой причине
+        # или что задержка слишком мала для учета
+        for cause in delay_causes:
+            delay_df[cause] = pd.to_numeric(delay_df[cause], errors='coerce').fillna(0)
 
-    # Создаем столбчатый график с черно-белыми столбцами и разной штриховкой
-    bars = ax.bar(avg_delays['Причина'], avg_delays['Средняя задержка'],
-                  color='white', edgecolor='black', linewidth=1.5)
-
-    # Добавляем разные штриховки для различения причин
-    for i, bar in enumerate(bars):
-        bar.set_hatch(HATCH_PATTERNS[i % len(HATCH_PATTERNS)])
-
-    # Добавляем значения над столбцами
-    for i, v in enumerate(avg_delays['Средняя задержка']):
-        ax.text(i, v + 0.1, f"{v:.2f}", ha='center', fontweight='bold')
-
-    configure_plot_for_cyrillic(
-        title='Средние задержки по разным причинам',
-        xlabel='Причина задержки',
-        ylabel='Средняя задержка (минуты)'
-    )
-
-    plt.tight_layout(pad=2.0)
-    plt.savefig('./img_black/avg_delay_by_cause.png', dpi=300, bbox_inches='tight')
-    plt.close()
-
-    # 2. Доля каждой причины в общей задержке
-    # Создаем новый DataFrame с процентным распределением причин
-    total_delay = df[delay_causes].sum().sum()
-    delay_pct = pd.DataFrame({
-        'Причина': ['Авиакомпания', 'Погода', 'Авиадиспетчеры', 'Безопасность', 'Позднее прибытие самолета'],
-        'Процент': [
-            df['CarrierDelay'].sum() / total_delay * 100,
-            df['WeatherDelay'].sum() / total_delay * 100,
-            df['NASDelay'].sum() / total_delay * 100,
-            df['SecurityDelay'].sum() / total_delay * 100,
-            df['LateAircraftDelay'].sum() / total_delay * 100
-        ]
-    })
-
-    # Создаем черно-белую круговую диаграмму с разными штриховками
-    fig, ax = plt.subplots(figsize=FIGURE_SIZE_SQUARE)
-
-    # Создаем круговую диаграмму
-    wedges, texts, autotexts = ax.pie(
-        delay_pct['Процент'],
-        labels=delay_pct['Причина'],
-        autopct='%1.1f%%',
-        startangle=90,
-        wedgeprops={'edgecolor': 'black', 'linewidth': 1.5},
-        textprops={'fontweight': 'bold'}
-    )
-
-    # Добавляем разные штриховки для сегментов
-    for i, wedge in enumerate(wedges):
-        wedge.set_facecolor('white')
-        wedge.set_hatch(HATCH_PATTERNS[i % len(HATCH_PATTERNS)])
-
-    # Настраиваем автотексты на контрастный цвет
-    for autotext in autotexts:
-        autotext.set_color('black')
-        autotext.set_fontweight('bold')
-
-    configure_plot_for_cyrillic(
-        title='Процентное распределение причин задержек'
-    )
-
-    ax.axis('equal')  # Обеспечивает круглую форму пирога
-    plt.tight_layout(pad=2.0)
-    plt.savefig('./img_black/delay_causes_pie.png', dpi=300, bbox_inches='tight')
-    plt.close()
-
-    # 3. Соотношение причин задержек по месяцам (если доступны)
-    if 'YearMonth' in df.columns:
-        # Создаем сводку причин задержек по месяцам
-        monthly_causes = df.groupby('YearMonth')[delay_causes].mean().reset_index()
-
-        # Переименовываем колонки
-        monthly_causes = monthly_causes.rename(columns={
-            'CarrierDelay': 'Авиакомпания',
-            'WeatherDelay': 'Погода',
-            'NASDelay': 'Авиадиспетчеры',
-            'SecurityDelay': 'Безопасность',
-            'LateAircraftDelay': 'Позднее прибытие самолета'
+        avg_delays = pd.DataFrame({
+            'Причина': ['Авиакомпания', 'Погода', 'Авиадиспетчеры', 'Безопасность', 'Позднее прибытие самолета'],
+            'Средняя задержка': [
+                delay_df['CarrierDelay'].mean(),
+                delay_df['WeatherDelay'].mean(),
+                delay_df['NASDelay'].mean(),
+                delay_df['SecurityDelay'].mean(),
+                delay_df['LateAircraftDelay'].mean()
+            ]
         })
 
-        # Переводим данные в формат long для построения графика
-        monthly_causes_long = pd.melt(
-            monthly_causes,
-            id_vars=['YearMonth'],
-            value_vars=['Авиакомпания', 'Погода', 'Авиадиспетчеры', 'Безопасность', 'Позднее прибытие самолета'],
-            var_name='Причина',
-            value_name='Средняя задержка'
-        )
+        # Создаем график со штриховками
+        fig, ax = plt.subplots(figsize=FIGURE_SIZE_STANDARD)
 
-        # Создаем график для черно-белой печати
-        fig, ax = plt.subplots(figsize=FIGURE_SIZE_WIDE)
+        # Создаем столбчатый график с черно-белыми столбцами и разной штриховкой
+        bars = ax.bar(avg_delays['Причина'], avg_delays['Средняя задержка'],
+                      color='white', edgecolor='black', linewidth=1.5)
 
-        # Получаем уникальные причины
-        causes = monthly_causes_long['Причина'].unique()
+        # Добавляем разные штриховки для различения причин
+        for i, bar in enumerate(bars):
+            bar.set_hatch(HATCH_PATTERNS[i % len(HATCH_PATTERNS)])
 
-        # Для каждой причины рисуем линию с уникальным стилем
-        for i, cause in enumerate(causes):
-            cause_data = monthly_causes_long[monthly_causes_long['Причина'] == cause]
-            ax.plot(cause_data['YearMonth'], cause_data['Средняя задержка'],
-                    label=cause,
-                    color='black',
-                    linestyle=LINE_STYLES[i % len(LINE_STYLES)],
-                    marker=MARKER_STYLES[i % len(MARKER_STYLES)],
-                    linewidth=2,
-                    markersize=8)
+        # Добавляем значения над столбцами
+        for i, v in enumerate(avg_delays['Средняя задержка']):
+            ax.text(i, v + 0.1, f"{v:.2f}", ha='center', fontweight='bold')
 
         configure_plot_for_cyrillic(
-            title='Динамика причин задержек по месяцам',
-            xlabel='Год-Месяц',
-            ylabel='Средняя задержка (минуты)',
-            legend_loc='upper right'
+            title='Средние задержки по разным причинам',
+            xlabel='Причина задержки',
+            ylabel='Средняя задержка (минуты)'
         )
 
-        plt.xticks(rotation=45)
-        plt.tight_layout(pad=2.0)
-        plt.savefig('./img_black/monthly_delay_causes.png', dpi=300, bbox_inches='tight')
+        plt.tight_layout(pad=10.0)
+        plt.savefig('./img_black/avg_delay_by_cause.png', dpi=300, bbox_inches='tight')
         plt.close()
 
-    print("Анализ причин задержек завершен.")
+        # 1.2. Доля каждой причины в общей задержке
+        # Создаем новый DataFrame с процентным распределением причин
+        # Используем только числовые столбцы для суммирования
+        delay_sum = delay_df[delay_causes].sum()
+        total_delay = delay_sum.sum()
+
+        if total_delay > 0:  # Проверяем, что есть задержки для анализа
+            delay_pct = pd.DataFrame({
+                'Причина': ['Авиакомпания', 'Погода', 'Авиадиспетчеры', 'Безопасность', 'Позднее прибытие самолета'],
+                'Процент': [
+                    delay_df['CarrierDelay'].sum() / total_delay * 100,
+                    delay_df['WeatherDelay'].sum() / total_delay * 100,
+                    delay_df['NASDelay'].sum() / total_delay * 100,
+                    delay_df['SecurityDelay'].sum() / total_delay * 100,
+                    delay_df['LateAircraftDelay'].sum() / total_delay * 100
+                ]
+            })
+
+            # Создаем черно-белую круговую диаграмму с разными штриховками
+            # Create pie chart with better legend placement
+            fig, ax = plt.subplots(figsize=FIGURE_SIZE_SQUARE)
+            wedges, _, autotexts = ax.pie(
+                delay_pct['Процент'],
+                labels=None,  # No labels within the chart
+                autopct='%1.1f%%',
+                startangle=90,
+                wedgeprops={'edgecolor': 'black', 'linewidth': 1.5},
+                textprops={'fontweight': 'bold'}
+            )
+
+            # Add hatching for all wedges
+            for i, wedge in enumerate(wedges):
+                wedge.set_facecolor('white')
+                wedge.set_hatch(HATCH_PATTERNS[i % len(HATCH_PATTERNS)])
+
+            # Make autotext always black and bold
+            for autotext in autotexts:
+                autotext.set_color('black')
+                autotext.set_fontweight('bold')
+
+            # Add legend outside the chart
+            ax.legend(
+                wedges,
+                delay_pct['Причина'],
+                title='Причины задержек',
+                loc='center left',
+                bbox_to_anchor=(1, 0.5),
+                frameon=True,
+                fontsize=10,
+                edgecolor='black'
+            )
+
+            configure_plot_for_cyrillic(
+                title='Процентное распределение причин задержек'
+            )
+
+            ax.axis('equal')  # Ensure the pie is circular
+            plt.tight_layout(pad=10.0)
+            plt.savefig('./img_black/delay_causes_pie.png', dpi=300, bbox_inches='tight')
+            plt.close()
+        else:
+            print("Не обнаружено данных о задержках для построения диаграммы распределения.")
+
+    # ЧАСТЬ 2: АНАЛИЗ ПРИЧИН ОТМЕН РЕЙСОВ (если данные доступны)
+    if has_cancellation_data:
+        # Фильтруем только отмененные рейсы
+        cancelled_flights = df[df['Cancelled'] == 1].copy()
+
+        if not cancelled_flights.empty:
+            # Создаем словарь для расшифровки кодов отмены
+            cancellation_codes = {
+                'A': 'Авиакомпания',
+                'B': 'Погода',
+                'C': 'Нац. авиасистема',
+                'D': 'Безопасность'
+            }
+
+            # Преобразуем коды в названия причин, если это возможно
+            cancelled_flights['CancellationReason'] = cancelled_flights['CancellationCode'].map(
+                lambda x: cancellation_codes.get(x, 'Неизвестно') if pd.notnull(x) else 'Неизвестно'
+            )
+
+            # Считаем количество отмен по каждой причине
+            cancellation_counts = cancelled_flights['CancellationReason'].value_counts().reset_index()
+            cancellation_counts.columns = ['Причина', 'Количество']
+
+            # Сортируем, чтобы причины шли в порядке важности
+            reason_order = ['Авиакомпания', 'Погода', 'Нац. авиасистема', 'Безопасность', 'Неизвестно']
+            cancellation_counts['sort_order'] = cancellation_counts['Причина'].apply(
+                lambda x: reason_order.index(x) if x in reason_order else len(reason_order)
+            )
+            cancellation_counts = cancellation_counts.sort_values('sort_order').drop('sort_order', axis=1)
+
+            # Создаем график отмен рейсов по причинам с улучшенным дизайном
+            fig, ax = plt.subplots(figsize=FIGURE_SIZE_STANDARD)
+
+            # Добавляем горизонтальные (вместо вертикальных) полосы для лучшей читаемости
+            bars = ax.barh(cancellation_counts['Причина'], cancellation_counts['Количество'],
+                           color='white', edgecolor='black', linewidth=1.5, height=0.6)
+
+            # Добавляем разные штриховки для различения причин
+            for i, bar in enumerate(bars):
+                bar.set_hatch(HATCH_PATTERNS[i % len(HATCH_PATTERNS)])
+
+            # Добавляем значения внутри полос
+            for i, (v, cause) in enumerate(zip(cancellation_counts['Количество'], cancellation_counts['Причина'])):
+                ax.text(v / 2, i, str(v), ha='center', va='center', fontweight='bold')
+
+            # Улучшаем дизайн
+            ax.set_axisbelow(True)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
+            configure_plot_for_cyrillic(
+                title='Причины отмены рейсов',
+                xlabel='Количество отмененных рейсов',
+                ylabel='Причина отмены'
+            )
+
+            plt.tight_layout(pad=10.0)
+            plt.savefig('./img_black/cancellation_causes.png', dpi=300, bbox_inches='tight')
+            plt.close()
+
+            # Создаем улучшенную круговую диаграмму причин отмены рейсов
+            fig, ax = plt.subplots(figsize=FIGURE_SIZE_SQUARE)
+
+            # Создаем круговую диаграмму с легендой справа
+            wedges, _, autotexts = ax.pie(
+                cancellation_counts['Количество'],
+                labels=None,  # Убираем метки для использования легенды
+                autopct='%1.1f%%',
+                startangle=90,
+                wedgeprops={'edgecolor': 'black', 'linewidth': 1.5},
+                textprops={'fontweight': 'bold'}
+            )
+
+            # Добавляем разные штриховки для сегментов
+            for i, wedge in enumerate(wedges):
+                wedge.set_facecolor('white')
+                wedge.set_hatch(HATCH_PATTERNS[i % len(HATCH_PATTERNS)])
+
+            # Настраиваем автотексты на контрастный цвет
+            for autotext in autotexts:
+                autotext.set_color('black')
+                autotext.set_fontweight('bold')
+
+            # Добавляем отдельную легенду с хорошим расположением
+            ax.legend(
+                wedges,
+                cancellation_counts['Причина'],
+                title='Причины отмены',
+                loc='center left',
+                bbox_to_anchor=(1, 0.5),
+                frameon=True,
+                fontsize=10,
+                edgecolor='black'
+            )
+
+            configure_plot_for_cyrillic(
+                title='Распределение причин отмены рейсов'
+            )
+
+            ax.axis('equal')  # Обеспечивает круглую форму пирога
+            plt.tight_layout(pad=10.0)
+            plt.savefig('./img_black/cancellation_causes_pie.png', dpi=300, bbox_inches='tight')
+            plt.close()
+
+            # Если есть данные о времени, добавляем график отмен по месяцам
+            if 'YearMonth' in df.columns:
+                # Группируем отмены по месяцам и причинам
+                monthly_cancellations = cancelled_flights.groupby(
+                    ['YearMonth', 'CancellationReason']).size().reset_index(name='Count')
+
+                # Создаем график для черно-белой печати
+                fig, ax = plt.subplots(figsize=FIGURE_SIZE_WIDE)
+
+                # Получаем уникальные причины
+                reasons = monthly_cancellations['CancellationReason'].unique()
+
+                # Для каждой причины рисуем линию с уникальным стилем
+                for i, reason in enumerate(reasons):
+                    reason_data = monthly_cancellations[monthly_cancellations['CancellationReason'] == reason]
+
+                    # Если у причины только одна точка данных, добавляем маркер
+                    if len(reason_data) == 1:
+                        ax.scatter(reason_data['YearMonth'], reason_data['Count'],
+                                   label=reason,
+                                   color='black',
+                                   marker=MARKER_STYLES[i % len(MARKER_STYLES)],
+                                   s=100)
+                    else:
+                        ax.plot(reason_data['YearMonth'], reason_data['Count'],
+                                label=reason,
+                                color='black',
+                                linestyle=LINE_STYLES[i % len(LINE_STYLES)],
+                                marker=MARKER_STYLES[i % len(MARKER_STYLES)],
+                                linewidth=2,
+                                markersize=8)
+
+                configure_plot_for_cyrillic(
+                    title='Динамика причин отмены рейсов по месяцам',
+                    xlabel='Год-Месяц',
+                    ylabel='Количество отмененных рейсов',
+                    legend_loc='upper right'
+                )
+
+                plt.xticks(rotation=45)
+                plt.tight_layout(pad=10.0)
+                plt.savefig('./img_black/monthly_cancellation_causes.png', dpi=300, bbox_inches='tight')
+                plt.close()
+        else:
+            print("В выборке нет отмененных рейсов.")
+
+    print("Анализ причин задержек и отмен рейсов завершен.")
 
 
 # Функция для анализа корреляций
@@ -722,7 +1061,7 @@ def analyze_correlations(df):
             title="Корреляционная матрица факторов полета и задержек"
         )
 
-        plt.tight_layout(pad=2.0)
+        plt.tight_layout(pad=10.0)
         plt.savefig('./img_black/correlation_heatmap.png', dpi=300, bbox_inches='tight')
         plt.close()
 
@@ -848,8 +1187,8 @@ def build_delay_prediction_models(df, target='ArrDelay'):
         kde_test = gaussian_kde(y_test)
         kde_pred = gaussian_kde(y_pred)
 
-        plt.plot(x_range, kde_test(x_range), 'k-', linewidth=2, label='_nolegend_')
-        plt.plot(x_range, kde_pred(x_range), 'k--', linewidth=2, label='_nolegend_')
+        plt.plot(x_range, kde_test(x_range), 'k-', linewidth=2, label='Фактические значения')
+        plt.plot(x_range, kde_pred(x_range), 'k--', linewidth=2, label='Предсказанные значения')
 
         configure_plot_for_cyrillic(
             title=f"Распределение фактических и предсказанных значений\nМодель: {model_names_ru[name]}",
@@ -857,7 +1196,7 @@ def build_delay_prediction_models(df, target='ArrDelay'):
             ylabel="Плотность",
             legend_loc='upper right'
         )
-        plt.tight_layout(pad=2.0)
+        plt.tight_layout(pad=10.0)
         plt.savefig(f'./img_black/{target.lower()}_{name.lower().replace(" ", "_")}_distribution.png',
                     dpi=300, bbox_inches='tight')
         plt.close()
@@ -892,7 +1231,7 @@ def build_delay_prediction_models(df, target='ArrDelay'):
                      bbox=dict(boxstyle="round,pad=0.5", facecolor='white', edgecolor='black'),
                      fontsize=12, weight='bold', ha='left', va='top')
 
-        plt.tight_layout(pad=2.0)
+        plt.tight_layout(pad=10.0)
         plt.savefig(f'./img_black/{target.lower()}_{name.lower().replace(" ", "_")}_comparison.png',
                     dpi=300, bbox_inches='tight')
         plt.close()
