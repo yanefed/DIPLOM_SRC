@@ -39,6 +39,7 @@ app.include_router(checklist_router, prefix="/api/v1/checklists", tags=["checkli
 app.include_router(probability_router, prefix="/api/v1/probability", tags=["probability"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(delay_prediction_router, prefix="/api/v1/predict", tags=["prediction"])
+app.include_router(delay_prediction_router, prefix="/api/v1/predict/historical_delays", tags=["prediction"])
 
 @app.get("/")
 async def read_root():

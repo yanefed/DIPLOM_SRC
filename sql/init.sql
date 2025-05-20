@@ -136,11 +136,14 @@ VALUES
 (111, 'Среднеколымск', 'SEK', 'Среднеколымск', 'Аэропорт Среднеколымск', 'РС(Я)', 'Россия', 67.4703, 153.7364);
 
 -- DELETE FROM flights;
+select *
+from flight_data_for_visualization
+limit 1;
 -- DELETE FROM delay;
 -- DELETE FROM flight_airport_2;
 
 
-
+-- новая таблица для сбора данных для визуализации
 CREATE TABLE flight_data_for_visualization AS
 SELECT
     f.fl_date AS "FlightDate",
@@ -216,3 +219,9 @@ LEFT JOIN
     public.airports dst ON f.dest_airport = dst.airport_code
 ORDER BY
     f.fl_date;
+
+
+SELECT *
+FROM public.flight_data_for_visualization
+ORDER BY md5(random()::text)
+LIMIT 100;

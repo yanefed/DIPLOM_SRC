@@ -1,3 +1,5 @@
+import time
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -52,7 +54,7 @@ except Exception as e:
 
 
 # Определяем функцию загрузки данных (аналог load_data из graphics_black.py)
-def load_data(table_name='flight_data_for_visualization', sample_size=10000):
+def load_data(table_name='flight_data_for_visualization', sample_size=10):
     """
     Загружает данные о рейсах из базы данных PostgreSQL
     """
@@ -95,14 +97,62 @@ def preprocess_data(df):
     if 'FlightDate' in df.columns:
         df['FlightDate'] = pd.to_datetime(df['FlightDate'])
 
-    # Заполнение пропусков в числовых колонках с задержками
-    delay_columns = ['DepDelay', 'ArrDelay', 'CarrierDelay', 'WeatherDelay',
-                     'NASDelay', 'SecurityDelay', 'LateAircraftDelay']
+    # Обработка числовых столбцов
+    numeric_columns = ['Year', 'DayofMonth', 'Distance', 'Seats', 'AirTime',
+                       'DepDelay', 'ArrDelay', 'CarrierDelay', 'WeatherDelay',
+                       'NASDelay', 'SecurityDelay', 'LateAircraftDelay',
+                       'TaxiIn', 'TaxiOut', 'ActualElapsedTime', 'CRSElapsedTime']
 
-    for col in delay_columns:
+    for col in numeric_columns:
         if col in df.columns:
-            # Заполняем пропуски нулями для нечисловых значений
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            print(f"Преобразование числового столбца: {col}")
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            # Заполнение пропусков для числовых столбцов
+            if df[col].isna().any():
+                if col in ['DepDelay', 'ArrDelay', 'CarrierDelay', 'WeatherDelay',
+                           'NASDelay', 'SecurityDelay', 'LateAircraftDelay']:
+                    # Для задержек заполняем нулями
+                    df[col] = df[col].fillna(0)
+                else:
+                    # Для других числовых столбцов заполняем медианой
+                    df[col] = df[col].fillna(df[col].median())
+
+    # Обработка временных полей (превращаем в минуты от полуночи)
+    time_columns = ['CRSDepTime', 'CRSArrTime']
+    for col in time_columns:
+        if col in df.columns:
+            print(f"Преобразование времени в поле {col}")
+
+            # Функция для преобразования времени в минуты от полуночи
+            def time_to_minutes(time_str):
+                try:
+                    if pd.isna(time_str):
+                        return None
+
+                    # Если уже число, возвращаем как есть
+                    if isinstance(time_str, (int, float)):
+                        return float(time_str)
+
+                    # Разделяем часы и минуты
+                    parts = str(time_str).strip().split(':')
+                    if len(parts) == 2:
+                        hours, minutes = int(parts[0]), int(parts[1])
+                        return float(hours * 60 + minutes)
+                    else:
+                        return None
+                except Exception as e:
+                    print(f"Ошибка при обработке времени '{time_str}': {e}")
+                    return None
+
+            # Применяем функцию к столбцу и заменяем пропуски медианой
+            df[col] = df[col].apply(time_to_minutes)
+
+            # Проверяем, есть ли пропуски
+            if df[col].isna().any():
+                median_value = df[col].median()
+                df[col] = df[col].fillna(median_value)
+                print(f"  - Заполнено {df[col].isna().sum()} пропусков медианой {median_value}")
 
     # Создаем категориальные переменные для месяца и дня недели
     if 'Month' in df.columns:
@@ -112,6 +162,9 @@ def preprocess_data(df):
         df['DayOfWeek'] = df['DayOfWeek'].astype('category')
 
     print("Предобработка данных завершена.")
+    print(f"Типы данных после предобработки:")
+    print(df.dtypes.head(10))  # Показать первые 10 типов данных для диагностики
+
     return df
 
 
@@ -465,13 +518,15 @@ class EnhancedAdaptivePredictorWrapper:
 
         # Преобразуем входные признаки в формат, необходимый для EnhancedAdaptivePredictor
         for i, row in X.iterrows():
-            # Получаем необходимые параметры из признаков (это нужно адаптировать к вашим данным)
-            if 'Origin' in row and 'Dest' in row and 'FlightDate' in row:
+            # Получаем необходимые параметры из признаков
+            if 'Origin' in row.index and 'Dest' in row.index and 'FlightDate' in row.index:
                 origin = row['Origin']
                 destination = row['Dest']
                 date = row['FlightDate'] if isinstance(row['FlightDate'], datetime) else datetime.strptime(
                     str(row['FlightDate']), '%Y-%m-%d')
-                airline = row.get('Airline', None)
+
+                # Используем Reporting_Airline вместо Airline
+                airline = row.get('Reporting_Airline', None)
 
                 # Получаем предсказание от вашего предиктора
                 try:
@@ -480,12 +535,14 @@ class EnhancedAdaptivePredictorWrapper:
                     y_pred.append(delay_pred)
                 except Exception as e:
                     # В случае ошибки используем случайное значение в разумном диапазоне
+                    print(f"Ошибка предсказания: {str(e)}")
                     y_pred.append(random.uniform(10, 20))
             else:
                 # Если необходимых признаков нет, используем средние значения из тренировочных данных
                 y_pred.append(self.y_train.mean())
 
         return np.array(y_pred)
+
 
 def create_comparison_chart(results, target_ru):
     """
@@ -518,7 +575,7 @@ def create_comparison_chart(results, target_ru):
         ylabel="Модель"
     )
     plt.tight_layout(pad=10.0)
-    plt.savefig(f'./img_black/model_comparison_rmse.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'./comparison_black/model_comparison_rmse.png', dpi=300, bbox_inches='tight')
     plt.close()
 
     # Создаем график для R² (чем выше, тем лучше)
@@ -541,7 +598,7 @@ def create_comparison_chart(results, target_ru):
         ylabel="Модель"
     )
     plt.tight_layout(pad=10.0)
-    plt.savefig(f'./img_black/model_comparison_r2.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'./comparison_black/model_comparison_r2.png', dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -565,8 +622,20 @@ def compare_models(df, target='ArrDelay', db_session=None):
         return
 
     # Список возможных признаков для модели
-    possible_features = ['Month', 'DayofMonth', 'DayOfWeek', 'Origin', 'Dest', 'Airline',
-                        'CRSDepTime', 'CRSArrTime', 'Distance', 'CRSElapsedTime', 'FlightDate']
+    possible_features = ['Month', 'DayofMonth', 'DayOfWeek', 'Origin', 'Dest', 'Reporting_Airline',
+                         'CRSDepTime', 'CRSArrTime', 'Distance', 'CRSElapsedTime']
+
+    # Для сохранения даты для предиктора, но не для других моделей
+    date_for_predictor = None
+    if 'FlightDate' in df.columns:
+        # Сохраняем дату для нашего предиктора
+        date_for_predictor = df['FlightDate'].copy()
+
+        # Создаем числовые признаки из даты
+        print("Создание числовых признаков из даты...")
+        if 'DayofYear' not in df.columns:
+            df['DayofYear'] = df['FlightDate'].dt.dayofyear
+            possible_features.append('DayofYear')
 
     # Добавляем DepDelay в признаки, если целевая - ArrDelay
     if target == 'ArrDelay' and 'DepDelay' in df.columns:
@@ -579,12 +648,28 @@ def compare_models(df, target='ArrDelay', db_session=None):
         print("Недостаточно признаков для построения модели. Пропускаем.")
         return
 
+    print(f"Используемые признаки: {features}")
+
     # Подготовка данных для моделирования
     data_subset = df[features + [target]].dropna()
 
+    # Получаем список категориальных переменных, которые есть в данных
+    cat_columns = []
+    for col in ['Month', 'DayOfWeek', 'Origin', 'Dest', 'Reporting_Airline']:
+        if col in data_subset.columns:
+            cat_columns.append(col)
+
+    print(f"Категориальные переменные для dummy-кодирования: {cat_columns}")
+
     # Преобразование категориальных переменных
-    data_model = pd.get_dummies(data_subset, columns=['Month', 'DayOfWeek', 'Origin', 'Dest', 'Airline'],
-                             drop_first=True)
+    if cat_columns:
+        data_model = pd.get_dummies(data_subset, columns=cat_columns, drop_first=True)
+    else:
+        data_model = data_subset
+        print("Внимание: нет категориальных переменных для кодирования")
+
+    # Проверим размерность данных
+    print(f"Размерность данных после преобразования: {data_model.shape}")
 
     # Разделение на признаки и целевую переменную
     X = data_model.drop(target, axis=1)
@@ -593,7 +678,19 @@ def compare_models(df, target='ArrDelay', db_session=None):
     # Разделение на обучающую и тестовую выборки
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Словарь с русскими названиями моделей
+    # Если сохранили даты, создаем вспомогательный DataFrame для EnhancedAdaptivePredictor
+    if date_for_predictor is not None:
+        # Создаем индексы обучающей и тестовой выборок
+        train_indices = X_train.index
+        test_indices = X_test.index
+
+        # Создаем вспомогательный DataFrame для EnhancedAdaptivePredictor
+        X_test_with_date = X_test.copy()
+        X_test_with_date['FlightDate'] = date_for_predictor.loc[test_indices].values
+    else:
+        X_test_with_date = X_test
+
+        # Словарь с русскими названиями моделей
     model_names_ru = {
         'Linear Regression': 'Линейная регрессия',
         'Decision Tree': 'Дерево решений',
@@ -615,6 +712,13 @@ def compare_models(df, target='ArrDelay', db_session=None):
     if db_session:
         models['EnhancedAdaptivePredictor'].session = db_session
 
+    # Измеряем производительность моделей
+    performance_metrics = measure_model_performance(
+        models, X_train, y_train, X_test,
+        date_for_predictor=date_for_predictor if 'date_for_predictor' in locals() else None,
+        db_session=db_session
+    )
+
     # Хранение результатов метрик
     results = {
         'Model': [],
@@ -623,11 +727,63 @@ def compare_models(df, target='ArrDelay', db_session=None):
         'MAE': []
     }
 
+    # Информация о полноте прогноза
+    completeness_results = {}
+
     # Обучение моделей и визуализация результатов
     for name, model in models.items():
         print(f"Обучение модели: {name}")
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+
+        # Засекаем время обучения
+        train_start = time.time()
+
+        # Для XGBoost преобразуем все данные в числовой формат
+        if name == 'XGBoost':
+            print("Преобразование данных для XGBoost...")
+            # Преобразуем все данные в float для XGBoost
+            X_train_xgb = X_train.astype(float)
+            X_test_xgb = X_test.astype(float)
+            model.fit(X_train_xgb, y_train)
+
+            # Засекаем время предсказания
+            predict_start = time.time()
+            y_pred = model.predict(X_test_xgb)
+            predict_end = time.time()
+
+        elif name == 'EnhancedAdaptivePredictor' and date_for_predictor is not None:
+            model.fit(X_train, y_train)
+
+            # Создаем копию X_test с датами
+            X_test_with_date = X_test.copy()
+            X_test_with_date['FlightDate'] = date_for_predictor
+
+            # Засекаем время предсказания
+            predict_start = time.time()
+            y_pred = model.predict(X_test_with_date)
+            predict_end = time.time()
+
+            # Оцениваем полноту прогноза
+            completeness_results[name] = evaluate_prediction_completeness(
+                model, X_test, y_test, name,
+                session=db_session,
+                date_for_predictor=date_for_predictor
+            )
+        else:
+            model.fit(X_train, y_train)
+
+            # Засекаем время предсказания
+            predict_start = time.time()
+            y_pred = model.predict(X_test)
+            predict_end = time.time()
+
+            # Записываем время
+        train_end = time.time()
+        training_time = train_end - train_start
+        prediction_time = predict_end - predict_start
+
+        print(f"  Время обучения: {training_time:.4f} с")
+        print(f"  Время предсказания: {prediction_time:.4f} с")
+        print(f"  Предсказаний в секунду: {len(X_test) / prediction_time:.2f}")
 
         # Оценка модели
         mse = mean_squared_error(y_test, y_pred)
@@ -675,7 +831,7 @@ def compare_models(df, target='ArrDelay', db_session=None):
             legend_loc='upper right'
         )
         plt.tight_layout(pad=10.0)
-        plt.savefig(f'./img_black/{target.lower()}_{name.lower().replace(" ", "_")}_distribution.png',
+        plt.savefig(f'./comparison_black/{target.lower()}_{name.lower().replace(" ", "_")}_distribution.png',
                   dpi=300, bbox_inches='tight')
         plt.close()
 
@@ -707,14 +863,53 @@ def compare_models(df, target='ArrDelay', db_session=None):
                    fontsize=12, weight='bold', ha='left', va='top')
 
         plt.tight_layout(pad=10.0)
-        plt.savefig(f'./img_black/{target.lower()}_{name.lower().replace(" ", "_")}_comparison.png',
+        plt.savefig(f'./comparison_black/{target.lower()}_{name.lower().replace(" ", "_")}_comparison.png',
                   dpi=300, bbox_inches='tight')
         plt.close()
 
-    # Создание сводного графика сравнения всех моделей
-    create_comparison_chart(results, target_ru)
+        # Создание сводного графика сравнения всех моделей
+        create_comparison_chart(results, target_ru)
 
-    print(f"Сравнение моделей для {target} завершено.")
+        # Если есть данные о полноте прогноза, создаем дополнительный график
+        if completeness_results:
+            print("\nСоздание графиков полноты прогноза...")
+
+            # Создаем график зависимости метрик от уровня уверенности для EnhancedAdaptivePredictor
+            if 'EnhancedAdaptivePredictor' in completeness_results:
+                metrics_by_conf = completeness_results['EnhancedAdaptivePredictor']['metrics_by_confidence']
+
+                if metrics_by_conf:
+                    # Выбираем метрики
+                    thresholds = [m['Threshold'] for m in metrics_by_conf]
+                    rmse_values = [m['RMSE'] for m in metrics_by_conf]
+                    coverage_values = [m['Coverage'] for m in metrics_by_conf]
+
+                    # Создаем график для RMSE и Coverage
+                    fig, ax1 = plt.subplots(figsize=FIGURE_SIZE_STANDARD)
+
+                    # RMSE - основная ось
+                    line1 = ax1.plot(thresholds, rmse_values, 'k-', marker='o', linewidth=2, label='RMSE')
+                    ax1.set_xlabel('Порог уверенности')
+                    ax1.set_ylabel('RMSE')
+
+                    # Coverage - вторая ось
+                    ax2 = ax1.twinx()
+                    line2 = ax2.plot(thresholds, coverage_values, 'k--', marker='s', linewidth=2, label='Охват данных')
+                    ax2.set_ylabel('Охват данных')
+
+                    # Объединяем линии из обеих осей для легенды
+                    lines = line1 + line2
+                    labels = [l.get_label() for l in lines]
+
+                    ax1.legend(lines, labels, loc='upper right')
+
+                    plt.title('Зависимость RMSE и охвата данных от порога уверенности')
+                    plt.grid(True, linestyle='--', alpha=0.7)
+                    plt.tight_layout(pad=10.0)
+                    plt.savefig(f'./comparison_black/confidence_threshold_impact.png', dpi=300, bbox_inches='tight')
+                    plt.close()
+
+        print(f"Сравнение моделей для {target} завершено.")
 
 
 def main():
@@ -733,6 +928,11 @@ def main():
 
         # Преобразуем список словарей в DataFrame
         df = pd.DataFrame(data)
+
+        # Вывод информации о структуре данных для диагностики
+        print("\nСтруктура данных:")
+        print(f"Форма DataFrame: {df.shape}")
+        print(f"Столбцы: {df.columns.tolist()}")
 
         # Предобработка данных
         df = preprocess_data(df)
@@ -754,6 +954,243 @@ def main():
 
     except Exception as e:
         print(f"Ошибка при сравнении моделей: {str(e)}")
+
+
+def evaluate_prediction_completeness(model, X_test, y_test, model_name, session=None, date_for_predictor=None):
+    """
+    Оценивает полноту прогноза для модели
+
+    Args:
+        model: Обученная модель
+        X_test: Тестовая выборка (признаки)
+        y_test: Тестовая выборка (целевая переменная)
+        model_name: Название модели
+        session: Сессия базы данных (для EnhancedAdaptivePredictor)
+        date_for_predictor: Даты для EnhancedAdaptivePredictor
+
+    Returns:
+        dict: Словарь с метриками полноты прогноза
+    """
+    print(f"\nОценка полноты прогноза для модели {model_name}...")
+
+    start_time = time.time()
+
+    # Для XGBoost преобразуем данные в float
+    if model_name == 'XGBoost':
+        X_test_model = X_test.astype(float)
+    # Для EnhancedAdaptivePredictor используем данные с датой
+    elif model_name == 'EnhancedAdaptivePredictor' and date_for_predictor is not None:
+        X_test_model = X_test.copy()
+        X_test_model['FlightDate'] = date_for_predictor
+    else:
+        X_test_model = X_test
+
+    # Делаем предсказания
+    predictions = []
+    confidences = []
+
+    # Для EnhancedAdaptivePredictor получаем также оценку уверенности
+    if model_name == 'EnhancedAdaptivePredictor':
+        for i, row in X_test_model.iterrows():
+            try:
+                # Извлекаем значения для предиктора
+                if 'Origin' in row.index and 'Dest' in row.index and 'FlightDate' in row.index:
+                    origin = row['Origin']
+                    destination = row['Dest']
+                    date = row['FlightDate']
+                    airline = row.get('Reporting_Airline', None)
+
+                    # Получаем предсказание с уверенностью
+                    pred, conf = model.predictor.predict(session, origin, destination, date, airline)
+                    predictions.append(pred)
+                    confidences.append(conf)
+                else:
+                    predictions.append(None)
+                    confidences.append(0)
+            except Exception as e:
+                print(f"Ошибка при предсказании: {str(e)}")
+                predictions.append(None)
+                confidences.append(0)
+    else:
+        # Для обычных моделей нет оценки уверенности
+        y_pred = model.predict(X_test_model)
+        predictions = y_pred
+        confidences = [1.0] * len(y_pred)  # Считаем, что все предсказания имеют уверенность 1.0
+
+    # Рассчитываем метрики полноты
+    total_examples = len(y_test)
+    valid_predictions = sum(1 for p in predictions if p is not None)
+    prediction_coverage = valid_predictions / total_examples
+
+    # Создаем DataFrame для удобства анализа
+    results_df = pd.DataFrame({
+        'Actual': y_test.values,
+        'Predicted': predictions,
+        'Confidence': confidences
+    }).dropna()
+
+    # Рассчитываем метрики при разных уровнях уверенности
+    confidence_thresholds = [0.0, 0.5, 0.7, 0.9, 0.95]
+    metrics_by_confidence = []
+
+    for threshold in confidence_thresholds:
+        filtered_df = results_df[results_df['Confidence'] >= threshold]
+
+        if len(filtered_df) > 0:
+            rmse = np.sqrt(mean_squared_error(filtered_df['Actual'], filtered_df['Predicted']))
+            mae = mean_absolute_error(filtered_df['Actual'], filtered_df['Predicted'])
+            r2 = r2_score(filtered_df['Actual'], filtered_df['Predicted'])
+            coverage = len(filtered_df) / total_examples
+
+            metrics_by_confidence.append({
+                'Threshold': threshold,
+                'RMSE': rmse,
+                'MAE': mae,
+                'R2': r2,
+                'Coverage': coverage,
+                'Count': len(filtered_df)
+            })
+
+    end_time = time.time()
+    evaluation_time = end_time - start_time
+
+    # Выводим результаты
+    print(f"Общее количество примеров: {total_examples}")
+    print(f"Валидных предсказаний: {valid_predictions} ({prediction_coverage:.2%})")
+    print(f"Время оценки: {evaluation_time:.4f} секунд")
+
+    if metrics_by_confidence:
+        print("\nМетрики при разных уровнях уверенности:")
+        for m in metrics_by_confidence:
+            print(f"  Порог {m['Threshold']}: RMSE={m['RMSE']:.2f}, MAE={m['MAE']:.2f}, R2={m['R2']:.2f}, "
+                  f"Охват={m['Coverage']:.2%}, Примеров={m['Count']}")
+
+    # Возвращаем результаты
+    return {
+        'total_examples': total_examples,
+        'valid_predictions': valid_predictions,
+        'prediction_coverage': prediction_coverage,
+        'metrics_by_confidence': metrics_by_confidence,
+        'evaluation_time': evaluation_time
+    }
+
+
+def measure_model_performance(models, X_train, y_train, X_test, date_for_predictor=None, db_session=None):
+    """
+    Измеряет производительность различных моделей (время обучения и предсказания)
+
+    Args:
+        models: Словарь с моделями
+        X_train: Обучающая выборка (признаки)
+        y_train: Обучающая выборка (целевая переменная)
+        X_test: Тестовая выборка (признаки)
+        date_for_predictor: Даты для EnhancedAdaptivePredictor
+        db_session: Сессия базы данных
+
+    Returns:
+        dict: Словарь с метриками производительности
+    """
+    performance_metrics = {
+        'Model': [],
+        'Training Time (s)': [],
+        'Prediction Time (s)': [],
+        'Predictions Per Second': []
+    }
+
+    print("\nИзмерение производительности моделей...")
+
+    for name, model in models.items():
+        print(f"Измерение производительности для модели: {name}")
+
+        # Измеряем время обучения
+        train_start = time.time()
+
+        if name == 'XGBoost':
+            # Для XGBoost преобразуем данные в float
+            X_train_model = X_train.astype(float)
+            model.fit(X_train_model, y_train)
+        else:
+            model.fit(X_train, y_train)
+
+        train_end = time.time()
+        training_time = train_end - train_start
+
+        # Измеряем время предсказания
+        predict_start = time.time()
+
+        if name == 'XGBoost':
+            X_test_model = X_test.astype(float)
+            _ = model.predict(X_test_model)
+        elif name == 'EnhancedAdaptivePredictor' and date_for_predictor is not None:
+            X_test_model = X_test.copy()
+            X_test_model['FlightDate'] = date_for_predictor
+            _ = model.predict(X_test_model)
+        else:
+            _ = model.predict(X_test)
+
+        predict_end = time.time()
+        prediction_time = predict_end - predict_start
+
+        # Рассчитываем производительность
+        test_size = len(X_test)
+        predictions_per_second = test_size / prediction_time if prediction_time > 0 else 0
+
+        # Сохраняем метрики
+        performance_metrics['Model'].append(name)
+        performance_metrics['Training Time (s)'].append(training_time)
+        performance_metrics['Prediction Time (s)'].append(prediction_time)
+        performance_metrics['Predictions Per Second'].append(predictions_per_second)
+
+        print(f"  Время обучения: {training_time:.4f} с")
+        print(f"  Время предсказания для {test_size} примеров: {prediction_time:.4f} с")
+        print(f"  Предсказаний в секунду: {predictions_per_second:.2f}")
+
+    # Создаем DataFrame с результатами
+    performance_df = pd.DataFrame(performance_metrics)
+
+    # Создаем визуализацию для времени обучения
+    plt.figure(figsize=FIGURE_SIZE_STANDARD)
+    bars = plt.barh(performance_df['Model'], performance_df['Training Time (s)'],
+                    color='white', edgecolor='black', hatch='////')
+
+    # Добавляем значения времени на график
+    for i, bar in enumerate(bars):
+        plt.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height() / 2,
+                 f"{performance_df['Training Time (s)'].iloc[i]:.2f} с",
+                 va='center', fontsize=10, weight='bold')
+
+    plt.grid(True, linestyle='--', alpha=0.7)
+    configure_plot_for_cyrillic(
+        title="Время обучения моделей",
+        xlabel="Время (секунды)",
+        ylabel="Модель"
+    )
+    plt.tight_layout(pad=10.0)
+    plt.savefig(f'./comparison_black/training_time_comparison.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    # Создаем визуализацию для скорости предсказания
+    plt.figure(figsize=FIGURE_SIZE_STANDARD)
+    bars = plt.barh(performance_df['Model'], performance_df['Predictions Per Second'],
+                    color='white', edgecolor='black', hatch='////')
+
+    # Добавляем значения на график
+    for i, bar in enumerate(bars):
+        plt.text(bar.get_width() + 1, bar.get_y() + bar.get_height() / 2,
+                 f"{performance_df['Predictions Per Second'].iloc[i]:.2f}/с",
+                 va='center', fontsize=10, weight='bold')
+
+    plt.grid(True, linestyle='--', alpha=0.7)
+    configure_plot_for_cyrillic(
+        title="Скорость предсказания моделей",
+        xlabel="Предсказаний в секунду",
+        ylabel="Модель"
+    )
+    plt.tight_layout(pad=10.0)
+    plt.savefig(f'./comparison_black/prediction_speed_comparison.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    return performance_metrics
 
 
 if __name__ == "__main__":
