@@ -4,94 +4,151 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Прогноз задержки рейса</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
-        <h1>Прогноз задержки рейса</h1>
+        <h1 class="app-title">Прогноз задержки рейса</h1>
 
-        <div class="prediction-form">
-            <div class="form-group">
-                <label for="origin">Аэропорт вылета:</label>
-                 <select id="origin" required>
-                    <option value="" disabled selected>Выберите аэропорт вылета</option>
-                    <!-- Будет заполнено динамически -->
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="destination">Аэропорт назначения:</label>
-                <select id="destination" required>
-                    <option value="" disabled selected>Выберите аэропорт назначения</option>
-                    <!-- Будет заполнено динамически -->
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="airline">Авиакомпания:</label>
-                <select id="airline" required>
-                    <option value="" disabled selected>Выберите авиакомпанию</option>
-                    <!-- Будет заполнено динамически -->
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="flight-date">Дата рейса:</label>
-                <input type="date" id="flight-date" required>
-            </div>
-
-            <div class="form-group">
-                <label for="flight-time">Время вылета:</label>
-                <select id="flight-time" required>
-                    <option value="" disabled selected>Выберите время вылета</option>
-                    <option value="00-02">00:00 - 02:00</option>
-                    <option value="02-04">02:00 - 04:00</option>
-                    <option value="04-06">04:00 - 06:00</option>
-                    <option value="06-08">06:00 - 08:00</option>
-                    <option value="08-10">08:00 - 10:00</option>
-                    <option value="10-12">10:00 - 12:00</option>
-                    <option value="12-14">12:00 - 14:00</option>
-                    <option value="14-16">14:00 - 16:00</option>
-                    <option value="16-18">16:00 - 18:00</option>
-                    <option value="18-20">18:00 - 20:00</option>
-                    <option value="20-22">20:00 - 22:00</option>
-                    <option value="22-00">22:00 - 00:00</option>
-                </select>
-            </div>
-
-            <button id="predict-button">Рассчитать задержку</button>
-        </div>
-
-            <div class="results" id="results-container">
-                <h2>Результаты прогноза</h2>
-                <div class="result-card hidden" id="result-card">
-                    <div class="prediction-value">
-                        <span id="delay-value">--</span> минут
+        <div class="row equal-height-row g-4">
+            <!-- Left column - Form -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header py-3">
+                        <h5 class="mb-0">Параметры рейса</h5>
                     </div>
-                    <div class="confidence">
-                        Уверенность прогноза:
-                        <span id="confidence-value">--</span>%
+                    <div class="card-body d-flex flex-column">
+                        <div class="mb-3">
+                            <label for="origin" class="form-label">Аэропорт вылета</label>
+                            <select id="origin" class="form-select" required>
+                                <option value="" disabled selected>Выберите аэропорт вылета</option>
+                                <!-- Будет заполнено динамически -->
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="destination" class="form-label">Аэропорт назначения</label>
+                            <select id="destination" class="form-select" required>
+                                <option value="" disabled selected>Выберите аэропорт назначения</option>
+                                <!-- Будет заполнено динамически -->
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="airline" class="form-label">Авиакомпания</label>
+                            <select id="airline" class="form-select" required>
+                                <option value="" disabled selected>Выберите авиакомпанию</option>
+                                <!-- Будет заполнено динамически -->
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="flight-date" class="form-label">Дата рейса</label>
+                            <input type="date" id="flight-date" class="form-control" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="flight-time" class="form-label">Время вылета</label>
+                            <select id="flight-time" class="form-select" required>
+                                <option value="" disabled selected>Выберите время вылета</option>
+                                <option value="00-02">00:00 - 02:00</option>
+                                <option value="02-04">02:00 - 04:00</option>
+                                <option value="04-06">04:00 - 06:00</option>
+                                <option value="06-08">06:00 - 08:00</option>
+                                <option value="08-10">08:00 - 10:00</option>
+                                <option value="10-12">10:00 - 12:00</option>
+                                <option value="12-14">12:00 - 14:00</option>
+                                <option value="14-16">14:00 - 16:00</option>
+                                <option value="16-18">16:00 - 18:00</option>
+                                <option value="18-20">18:00 - 20:00</option>
+                                <option value="20-22">20:00 - 22:00</option>
+                                <option value="22-00">22:00 - 00:00</option>
+                            </select>
+                        </div>
+
+                        <button id="predict-button" class="btn btn-primary w-100 mt-auto">
+                            Рассчитать задержку
+                        </button>
                     </div>
-                    <div class="route-info">
-                        <span id="route-info">--</span>
+                </div>
+            </div>
+
+            <!-- Right column - Results -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header py-3">
+                        <h5 class="mb-0">Результаты прогноза</h5>
                     </div>
-                    <div class="prediction-factors">
-                        <h3>Факторы, учитываемые при рассчете задержки:</h3>
-                        <ul id="factors-list"></ul>
+                    <div class="card-body d-flex flex-column">
+                        <div id="result-card" class="hidden">
+                            <div class="prediction-value mb-2">
+                                <span id="delay-value">--</span> минут
+                            </div>
+                            <div class="confidence mb-3">
+                                Уверенность прогноза:
+                                <span id="confidence-value">--</span>%
+                            </div>
+                            <div class="route-info alert alert-light py-2 mb-3">
+                                <span id="route-info">--</span>
+                            </div>
+                            <div class="prediction-factors">
+                                <h5 class="card-title mb-3">Учтенные факторы:</h5>
+                                <ul id="factors-list" class="mb-0"></ul>
+                            </div>
+                        </div>
+
+                        <!-- Placeholder when no results -->
+                        <div id="no-results" class="text-center py-4 my-auto">
+                            <img src="https://cdn-icons-png.flaticon.com/512/1055/1055645.png" alt="Airplane" width="80" class="mb-3 opacity-25">
+                            <h5 class="text-muted">Заполните форму и нажмите "Рассчитать задержку"</h5>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
+        <!-- Chart section (full width below) -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card" id="historical-data-container" style="display: none;">
+                    <div class="card-header py-3">
+                        <h5 class="mb-0">Задержки за последние 7 дней</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="delay-history-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
+    </div>
 
-        <div class="historical-data" id="historical-data-container" style="display: none;">
-          <h2>Задержки за последние 7 дней</h2>
-          <div class="chart-container" style="position: relative; height: 300px;">
-            <canvas id="delay-history-chart"></canvas>
-          </div>
-        </div>
-        <script src="/static/js/main.js"></script>
-    </body>
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- Custom JavaScript -->
+    <script src="/static/js/main.js"></script>
+
+    <script>
+        // Hide the no-results placeholder when results are shown
+        document.addEventListener("DOMContentLoaded", function() {
+            const predictButton = document.getElementById('predict-button');
+            predictButton.addEventListener('click', function() {
+                const noResults = document.getElementById('no-results');
+                if (noResults) {
+                    setTimeout(function() {
+                        if (!document.getElementById('result-card').classList.contains('hidden')) {
+                            noResults.style.display = 'none';
+                        }
+                    }, 500);
+                }
+            });
+        });
+    </script>
+</body>
 </html>

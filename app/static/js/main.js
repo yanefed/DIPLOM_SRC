@@ -369,7 +369,7 @@ function displayResult(data) {
     document.getElementById("delay-value").textContent = data.predicted_delay;
     document.getElementById("confidence-value").textContent = data.confidence;
     document.getElementById("route-info").textContent =
-        `${data.origin} → ${data.destination} (${data.airline || "все авиакомпании"}) на ${data.date} в ${data.time_interval || "любое время"}`;
+        `${data.origin} → ${data.destination} (${data.airline || "все авиакомпании"}) на ${data.date}`;
 
     const factorsList = document.getElementById("factors-list");
     factorsList.innerHTML = "";
