@@ -151,7 +151,7 @@ async function getPrediction() {
 // Function to fetch historical delay data and display chart
 async function fetchAndDisplayHistoricalDelays(origin, destination, airline) {
   try {
-    const url = `/api/v1/predict/historical_delays/${origin}/${destination}?airline=${airline}`;
+    const url = `/api/v1/historical_delays/${origin}/${destination}?airline=${airline}`;
     console.log(`⭐ Fetching historical data from: ${url}`);
 
     const response = await fetch(url);

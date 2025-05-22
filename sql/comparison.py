@@ -168,7 +168,6 @@ def preprocess_data(df):
     return df
 
 
-# Класс предиктора (скопирован из app/routers/delay_prediction.py)
 class EnhancedAdaptivePredictor:
     def __init__(self, learning_rate=0.01, spatial_weight=0.3, temporal_weight=0.4, seasonal_weight=0.3,
                  smoothing_factor=0.3):
@@ -231,25 +230,95 @@ class EnhancedAdaptivePredictor:
         # Комбинированный сезонный фактор
         return weekday_factors[weekday] * seasonal_factors[month]
 
+    def get_geographic_factors(self, db: Session, origin: str, destination: str):
+        """
+        Get geographic location data for airports and calculate related factors
+        that might affect flight delays (weather patterns, airport congestion, etc.)
+        """
+        try:
+            # Query to get geographic coordinates for both airports
+            geo_query = """
+                        SELECT o.airport_code as origin_code,
+                               o.latitude     as origin_lat,
+                               o.longitude    as origin_long,
+                               d.airport_code as dest_code,
+                               d.latitude     as dest_lat,
+                               d.longitude    as dest_long
+                        FROM airports o
+                                 JOIN airports d ON d.airport_code = :destination
+                        WHERE o.airport_code = :origin \
+                        """
+
+            result = db.execute(text(geo_query),
+                                {'origin': origin, 'destination': destination}).first()
+
+            if not result:
+                print(f"No geographic data found for {origin}-{destination}")
+                return {
+                    'weather_impact': 0.8,  # Default modest impact
+                    'distance_factor': 1.0,
+                    'airport_congestion': 1.0
+                }
+
+            def haversine(lon1, lat1, lon2, lat2):
+                # Convert decimal degrees to radians
+                lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+                # Haversine formula
+                dlon = lon2 - lon1
+                dlat = lat2 - lat1
+                a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+                c = 2 * asin(sqrt(a))
+                r = 6371  # Radius of earth in kilometers
+                return c * r
+
+            distance = haversine(result.origin_long, result.origin_lat,
+                                 result.dest_long, result.dest_lat)
+
+            # Calculate weather impact based on geographic location and season
+            # This would be more sophisticated with actual weather data
+            weather_impact = 1.0
+
+            # Higher latitudes have more seasonal weather variation
+            lat_factor = max(abs(result.origin_lat), abs(result.dest_lat)) / 90.0
+            weather_impact += 0.5 * lat_factor
+
+            # Airport congestion based on traffic estimates
+            # This would be more accurate with actual airport size/traffic data
+            airport_congestion = 1.0
+
+            return {
+                'weather_impact': weather_impact,
+                'distance_factor': distance / 1000,  # Normalize to a reasonable scale
+                'airport_congestion': airport_congestion
+            }
+
+        except Exception as e:
+            db.rollback()
+            print(f"Error getting geographic factors: {str(e)}")
+            return {
+                'weather_impact': 1.0,
+                'distance_factor': 1.0,
+                'airport_congestion': 1.0
+            }
+
     def spatial_temporal_features(self, db: Session, origin: str, destination: str, date: datetime,
                                   airline: str = None):
         # Проверка наличия данных в таблицах
         check_data_query = """
-        SELECT 
-            (SELECT COUNT(*) FROM flights) as flights_count,
-            (SELECT COUNT(*) FROM delay) as delays_count
-        """
+                           SELECT (SELECT COUNT(*) FROM flights) as flights_count,
+                                  (SELECT COUNT(*) FROM delay)   as delays_count \
+                           """
 
         data_check = db.execute(text(check_data_query)).first()
         print(f"Data check: Flights: {data_check.flights_count}, Delays: {data_check.delays_count}")
 
         # Базовый запрос для маршрута
         route_query = """
-        SELECT COUNT(*) as route_count
-        FROM flights 
-        WHERE origin_airport = :origin 
-        AND dest_airport = :destination
-        """
+                      SELECT COUNT(*) as route_count
+                      FROM flights
+                      WHERE origin_airport = :origin
+                        AND dest_airport = :destination \
+                      """
 
         route_check = db.execute(text(route_query),
                                  {'origin': origin, 'destination': destination}).first()
@@ -262,13 +331,13 @@ class EnhancedAdaptivePredictor:
 
         # Запрос для пространственных характеристик
         spatial_query = f"""
-        SELECT 
+        SELECT
             COALESCE(AVG(NULLIF(distance, 0)), 500) as avg_distance,
             COUNT(*) as route_frequency,
             MIN(distance) as min_distance,
             MAX(distance) as max_distance
         FROM flights f
-        WHERE origin_airport = :origin 
+        WHERE origin_airport = :origin
         AND dest_airport = :destination
         {airline_filter}
         """
@@ -276,7 +345,7 @@ class EnhancedAdaptivePredictor:
         # Запрос для временных характеристик с учетом дня недели и месяца
         temporal_query = f"""
         WITH flight_stats AS (
-            SELECT 
+            SELECT
                 f.id,
                 f.fl_date,
                 EXTRACT(DOW FROM f.fl_date) as day_of_week,
@@ -285,20 +354,20 @@ class EnhancedAdaptivePredictor:
                 COALESCE(d.cancelled, 0) as cancelled
             FROM flights f
             LEFT JOIN delay d ON f.id = d.id
-            WHERE f.origin_airport = :origin 
+            WHERE f.origin_airport = :origin
             AND f.dest_airport = :destination
             {airline_filter}
-            AND f.fl_date >= :date::timestamp - INTERVAL '365 days'
-            AND f.fl_date <= :date::timestamp
+            AND f.fl_date >= (:date)::timestamp - INTERVAL '365 days'
+            AND f.fl_date <= (:date)::timestamp
         )
-        SELECT 
+        SELECT
             COUNT(*) as total_flights,
             COALESCE(AVG(CASE WHEN dep_delay > 0 THEN dep_delay ELSE 0 END), 20) as avg_delay,
             COALESCE(MAX(dep_delay), 60) as max_delay,
             COALESCE(AVG(CASE WHEN cancelled = 1 THEN 1 ELSE 0 END), 0.05) as cancellation_rate,
             COUNT(DISTINCT DATE_TRUNC('day', fl_date)) as unique_days,
             -- Группировка по дню недели
-            COALESCE(AVG(CASE WHEN day_of_week = :target_dow THEN dep_delay ELSE NULL END), 
+            COALESCE(AVG(CASE WHEN day_of_week = :target_dow THEN dep_delay ELSE NULL END),
                     AVG(CASE WHEN dep_delay > 0 THEN dep_delay ELSE 0 END)) as dow_avg_delay,
             -- Группировка по месяцу
             COALESCE(AVG(CASE WHEN month = :target_month THEN dep_delay ELSE NULL END),
@@ -320,10 +389,49 @@ class EnhancedAdaptivePredictor:
 
         try:
             spatial_result = db.execute(text(spatial_query), query_params).first()
-            print(f"Spatial features: {dict(spatial_result) if spatial_result else 'None'}")
+            if spatial_result:
+                print("Detailed spatial data:")
+                try:
+                    # Alternative approach using column access by name
+                    spatial_dict = {}
+                    # Extract column names from the result
+                    if hasattr(spatial_result, '_fields'):
+                        column_names = spatial_result._fields
+                    else:
+                        column_names = ['avg_distance', 'route_frequency', 'min_distance', 'max_distance']
+
+                    # Build dictionary from column names and values
+                    for column in column_names:
+                        if hasattr(spatial_result, column):
+                            spatial_dict[column] = getattr(spatial_result, column)
+
+                    for key, value in spatial_dict.items():
+                        print(f"  {key}: {value}")
+                except Exception as e:
+                    print(f"Error converting spatial data to dictionary: {e}")
 
             temporal_result = db.execute(text(temporal_query), query_params).first()
-            print(f"Temporal features: {dict(temporal_result) if temporal_result else 'None'}")
+            if temporal_result:
+                print("Detailed temporal data:")  # Changed from "spatial" to "temporal"
+                try:
+                    # Alternative approach using column access by name
+                    temporal_dict = {}
+                    # Extract column names from the result
+                    if hasattr(temporal_result, '_fields'):
+                        column_names = temporal_result._fields
+                    else:
+                        column_names = ['total_flights', 'avg_delay', 'max_delay', 'cancellation_rate',
+                                        'unique_days', 'dow_avg_delay', 'month_avg_delay']
+
+                    # Build dictionary from column names and values
+                    for column in column_names:
+                        if hasattr(temporal_result, column):
+                            temporal_dict[column] = getattr(temporal_result, column)
+
+                    for key, value in temporal_dict.items():
+                        print(f"  {key}: {value}")
+                except Exception as e:
+                    print(f"Error converting temporal data to dictionary: {e}")
 
             # Если нет реальных данных, используем более реалистичные базовые предсказания
             if not spatial_result or not temporal_result:
@@ -351,18 +459,18 @@ class EnhancedAdaptivePredictor:
 
             return {
                 'spatial': {
-                    'avg_distance': float(spatial_result.avg_distance),
-                    'route_frequency': int(spatial_result.route_frequency),
-                    'min_distance': float(spatial_result.min_distance) if spatial_result.min_distance else 0,
-                    'max_distance': float(spatial_result.max_distance) if spatial_result.max_distance else 0
+                    'avg_distance': getattr(spatial_result, 'avg_distance', 500),
+                    'route_frequency': int(getattr(spatial_result, 'route_frequency', 10)),
+                    'min_distance': float(getattr(spatial_result, 'min_distance', 0) or 0),
+                    'max_distance': float(getattr(spatial_result, 'max_distance', 0) or 0)
                 },
                 'temporal': {
-                    'avg_delay': float(temporal_result.avg_delay),
-                    'max_delay': float(temporal_result.max_delay),
-                    'total_flights': int(temporal_result.total_flights),
-                    'cancellation_rate': float(temporal_result.cancellation_rate),
-                    'dow_avg_delay': float(temporal_result.dow_avg_delay),
-                    'month_avg_delay': float(temporal_result.month_avg_delay)
+                    'avg_delay': float(getattr(temporal_result, 'avg_delay', 20)),
+                    'max_delay': float(getattr(temporal_result, 'max_delay', 60)),
+                    'total_flights': int(getattr(temporal_result, 'total_flights', 10)),
+                    'cancellation_rate': float(getattr(temporal_result, 'cancellation_rate', 0.05)),
+                    'dow_avg_delay': float(getattr(temporal_result, 'dow_avg_delay', 20)),
+                    'month_avg_delay': float(getattr(temporal_result, 'month_avg_delay', 20))
                 },
                 'is_baseline': False,
                 'seasonal_factor': self.get_seasonal_factor(date)
@@ -371,128 +479,155 @@ class EnhancedAdaptivePredictor:
             print(f"Error in feature extraction: {str(e)}")
             return None
 
-    def predict(self, db: Session, origin: str, destination: str, date: datetime, airline: str = None):
-        # Создаем ключ кеша
-        cache_key = f"{origin}-{destination}-{date.strftime('%Y-%m-%d')}-{airline if airline else 'all'}"
+    def predict(self, db: Session, origin: str, destination: str, date: datetime, airline: str = None,
+                time_interval: str = None):
+        try:
+            # Добавленная диагностика для отслеживания запросов
+            print(f"\n{'=' * 50}")
+            print(
+                f"PREDICTION REQUEST: {origin} -> {destination}, Date: {date.strftime('%Y-%m-%d')}, Airline: {airline or 'Any'}, Time: {time_interval or 'Any'}")
+            print(f"{'=' * 50}")
 
-        # Проверяем, есть ли прогноз в кеше и не истек ли он
-        current_time = datetime.now()
-        if cache_key in self.prediction_cache and current_time < self.cache_expiry.get(cache_key, datetime.min):
-            return self.prediction_cache[cache_key]
+            # Проверка данных в БД напрямую
+            try:
+                route_count_query = text("""
+                                         SELECT COUNT(*) as count
+                                         FROM flights
+                                         WHERE origin_airport = :origin
+                                           AND dest_airport = :destination
+                                         """)
 
-        # Получаем данные
-        features = self.spatial_temporal_features(db, origin, destination, date, airline)
-        if not features:
-            # Генерируем случайное значение с меньшим разбросом
-            random_delay = random.uniform(15, 25)  # Меньший диапазон для стабильности
-            random_delay = round(random_delay / 5) * 5  # Округляем до ближайших 5 минут
-            confidence = 0.75  # Повышенная базовая уверенность
+                route_count = db.execute(route_count_query, {"origin": origin, "destination": destination}).scalar()
 
-            # Кешируем результат на короткое время
-            self.prediction_cache[cache_key] = (random_delay, confidence)
-            self.cache_expiry[cache_key] = current_time + timedelta(minutes=15)
+                delay_count_query = text("""
+                                         SELECT COUNT(*) as count
+                                         FROM flights f
+                                                  JOIN delay d ON f.id = d.id
+                                         WHERE f.origin_airport = :origin
+                                           AND f.dest_airport = :destination
+                                         """)
 
-            return random_delay, confidence
+                delay_count = db.execute(delay_count_query, {"origin": origin, "destination": destination}).scalar()
 
-        # Получаем коэффициент для авиакомпании
-        airline_factor = self.airline_factors.get(airline,
-                                                  self.default_airline_factor) if airline else self.default_airline_factor
+                print(
+                    f"Database check: Found {route_count} flights and {delay_count} delay records for route {origin}-{destination}")
+            except Exception as e:
+                print(f"Error checking database: {str(e)}")
 
-        # Новый подход: более прямое использование исторических данных
-        route_key = f"{origin}-{destination}-{airline if airline else 'all'}"
+            # Создаем ключ кеша с учетом временного интервала
+            cache_key = f"{origin}-{destination}-{date.strftime('%Y-%m-%d')}-{airline if airline else 'all'}-{time_interval if time_interval else 'all'}"
 
-        if not features.get('is_baseline', False):
-            # Используем историческую среднюю с небольшими корректировками
-            historical_avg = features['temporal']['avg_delay']
+            # Проверяем, есть ли прогноз в кеше и не истек ли он
+            current_time = datetime.now()
+            if cache_key in self.prediction_cache and current_time < self.cache_expiry.get(cache_key, datetime.min):
+                return self.prediction_cache[cache_key]
 
-            # Корректировка по дню недели и месяцу
-            dow_adjustment = features['temporal']['dow_avg_delay'] / features['temporal']['avg_delay'] if \
-                features['temporal']['avg_delay'] > 0 else 1
-            month_adjustment = features['temporal']['month_avg_delay'] / features['temporal']['avg_delay'] if \
-                features['temporal']['avg_delay'] > 0 else 1
+            # Получаем данные о маршруте и задержках
+            features = self.spatial_temporal_features(db, origin, destination, date, airline)
 
-            # Применяем сезонный фактор
-            seasonal_adjustment = features['seasonal_factor']
+            # Получаем географические факторы
+            geo_factors = self.get_geographic_factors(db, origin, destination)
 
-            # Корректировка по авиакомпании
-            airline_adjustment = airline_factor
+            # Проверяем наличие данных
+            if not features:
+                print(f"No feature data available for {origin}-{destination}, using fallback")
+                random_delay = random.uniform(15, 25)
+                confidence = 0.4 + random.uniform(0, 0.1)  # 40-50% confidence
 
-            # Итоговый прогноз
-            prediction = historical_avg * dow_adjustment * month_adjustment * seasonal_adjustment * airline_adjustment
+                # Cache the result
+                self.prediction_cache[cache_key] = (random_delay, confidence)
+                self.cache_expiry[cache_key] = current_time + timedelta(minutes=30)
 
-            # Для стабильности добавляем небольшое сглаживание
-            if route_key in self.last_predictions:
-                last_pred = self.last_predictions[route_key]
-                prediction = prediction * 0.8 + last_pred * 0.2
+                return random_delay, confidence
 
-            self.last_predictions[route_key] = prediction
-        else:
-            # Для маршрутов без исторических данных используем старый подход
-            # Компоненты прогноза с более стабильными весами
-            spatial_score = (
-                    min(features['spatial']['route_frequency'] / 100, 1) * 0.3 +
-                    min(features['spatial']['avg_distance'] / 2000, 1) * 0.7
-            ) * self.spatial_weight
+            # Обогащаем прогноз с помощью сезонности и дня недели
+            day_of_week = date.weekday()  # 0-6, where 0 is Monday
+            month = date.month  # 1-12
 
-            temporal_score = (
-                    min(features['temporal']['avg_delay'] / 120, 1) * 0.4 +
-                    min(features['temporal']['max_delay'] / 180, 1) * 0.2 +
-                    min(features['temporal']['dow_avg_delay'] / 100, 1) * 0.2 +
-                    min(features['temporal']['month_avg_delay'] / 100, 1) * 0.2
-            ) * self.temporal_weight
+            seasonal_factor = self.get_seasonal_factor(date)
+            print(f"Seasonal factor: {seasonal_factor}")
 
-            seasonal_score = features['seasonal_factor'] * self.seasonal_weight
+            # Инициализация прогноза
+            predicted_delay = 0
+            confidence = 0
 
-            # Более линейная формула базового прогноза
-            base_prediction = (features['temporal']['avg_delay'] * 0.5 +  # 50% от средней исторической задержки
-                               (spatial_score * 15) +  # Компонент расстояния
-                               (temporal_score * 15) +  # Дополнительный временной компонент
-                               (seasonal_score * 15)  # Сезонный компонент
-                               ) * airline_factor
+            # Определяем факторы, которые учитываются при прогнозе задержки
+            factors = [
+                "Исторические данные о рейсах",
+                f"День недели: {['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'][day_of_week]}",
+                f"Месяц: {date.strftime('%B')}",
+                f"Сезонный фактор: {seasonal_factor:.2f}"
+            ]
 
-            # Уменьшенный случайный шум
-            random_noise = random.uniform(-3, 3)
+            # Если указан временной интервал, добавляем его в факторы
+            if time_interval:
+                factors.append(f"Время вылета: {time_interval}")
 
-            # Рассчитываем итоговый прогноз
-            prediction = max(5, base_prediction + random_noise)
+                # Корректировка прогноза на основе времени вылета
+                # Утренние и вечерние часы обычно имеют больше задержек
+                time_start, time_end = map(int, time_interval.split('-'))
+                if time_start < 6 or time_start >= 18:
+                    time_factor = 1.2  # Больше задержек ночью и вечером
+                elif 10 <= time_start < 14:
+                    time_factor = 0.9  # Меньше задержек в середине дня
+                else:
+                    time_factor = 1.0  # Стандартное время
 
-            # Применяем только экспоненциальное сглаживание для стабильности
-            if route_key in self.last_predictions:
-                last_pred = self.last_predictions[route_key]
-                prediction = (self.smoothing_factor * prediction + (1 - self.smoothing_factor) * last_pred)
+                factors.append(f"Фактор времени суток: {time_factor:.2f}")
+            else:
+                time_factor = 1.0
 
-            self.last_predictions[route_key] = prediction
+            print("Using data-driven prediction model")
+            spatial = features['spatial']
+            temporal = features['temporal']
 
-        # Специальная обработка для очень длинных маршрутов
-        if features['spatial']['avg_distance'] > 5000:
-            prediction = prediction * 1.2
+            # Рассчитываем прогноз задержки на основе исторических данных
+            avg_delay = temporal['avg_delay']
+            max_delay = temporal['max_delay']
+            dow_avg = temporal['dow_avg_delay']
+            month_avg = temporal['month_avg_delay']
 
-        # Округление до ближайших 5 минут для стабильности
-        final_prediction = round(prediction / 5) * 5
+            # Рассчитываем базовый прогноз задержки
+            delay_prediction = avg_delay * 0.4 + dow_avg * 0.3 + month_avg * 0.3
 
-        # Расчет уверенности с улучшенными параметрами
-        total_flights_component = min(features['temporal']['total_flights'], 20) / 20 * 0.35
-        route_freq_component = min(features['spatial']['route_frequency'], 15) / 15 * 0.35
-        delay_component = (1 / (1 + math.exp(-features['temporal']['avg_delay'] / 30))) * 0.3
+            # Корректируем с учетом сезонного фактора
+            delay_prediction *= seasonal_factor
 
-        confidence = max(0.75, min(0.98, (
-                total_flights_component + route_freq_component + delay_component
-        )))
+            # Учитываем время вылета
+            delay_prediction *= time_factor
 
-        if features.get('is_baseline', False):
-            confidence *= 0.9  # Меньшее снижение уверенности для базовых предсказаний
+            # Учитываем географические факторы
+            delay_prediction *= geo_factors['weather_impact']
 
-        if airline and airline in self.airline_factors:
-            confidence = min(0.98, confidence * 1.1)  # Повышение для известных авиакомпаний
+            # Добавляем в факторы прогноза
+            factors.append(f"Географическое положение: фактор погоды {geo_factors['weather_impact']:.2f}")
+            if geo_factors['distance_factor'] > 1.2:
+                factors.append(f"Дальность маршрута: {geo_factors['distance_factor']:.2f}")
 
-        # Общее повышение уверенности для всех прогнозов
-        confidence = min(0.98, confidence * 1.2)
+            # Добавляем немного случайности для реалистичности прогноза
+            variation = random.uniform(0.9, 1.1)
+            delay_prediction *= variation
 
-        # Кешируем результат на короткое время
-        self.prediction_cache[cache_key] = (final_prediction, confidence)
-        self.cache_expiry[cache_key] = current_time + timedelta(minutes=15)
+            # Определяем итоговый прогноз задержки
+            predicted_delay = max(0, delay_prediction)
 
-        return final_prediction, confidence
+            # Рассчитываем уверенность в прогнозе на основе количества данных
+            data_points = temporal['total_flights']
+            confidence_base = min(0.95, 0.7 + (data_points / 1000) * 0.2)
+            confidence = confidence_base - (variation - 1.0) * 0.2  # Уменьшаем уверенность при большей вариации
+
+            # Добавляем специфические факторы для авиакомпании
+            if airline:
+                factors.append(f"Статистика авиакомпании: {airline}")
+
+            # Добавляем в кеш
+            self.prediction_cache[cache_key] = (predicted_delay, confidence, factors)
+            self.cache_expiry[cache_key] = current_time + timedelta(minutes=30)
+
+            return predicted_delay, confidence
+        except Exception as e:
+            db.rollback()
+            print(f"Error in prediction: {str(e)}")
 
 # Класс оболочка для EnhancedAdaptivePredictor, чтобы соответствовать интерфейсу scikit-learn
 class EnhancedAdaptivePredictorWrapper:
